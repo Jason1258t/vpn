@@ -1,17 +1,18 @@
 import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:vpn/vpn_status.dart';
 import 'vpn_repository.dart';
 
 part 'vpn_provider.g.dart';
 
 @riverpod
-VpnRepository vpnRepository(ref) {
+VpnRepository vpnRepository(Ref ref) {
   return VpnRepository();
 }
 
 @riverpod
-Stream<VpnStatus> vpnStatus(ref) {
+Stream<VpnStatus> vpnStatus(Ref ref) {
   final repo = ref.watch(vpnRepositoryProvider);
   return repo.status.stream;
 }
@@ -24,26 +25,21 @@ class VpnController extends _$VpnController {
   FutureOr<int> build() {
     updatePing();
     _initializePingChecker();
-    ref.onDispose(() {
-      _timer?.cancel();
-    });
-    return 0;
+    return defaultPingValue;
   }
 
   _initializePingChecker() {
     _timer = Timer.periodic(Duration(seconds: 5), (t) => updatePing());
+    ref.onDispose(() {
+      _timer?.cancel();
+    });
   }
 
   Future<void> toggleConnection() async {
     final repo = ref.read(vpnRepositoryProvider);
     final status = ref.read(vpnStatusProvider).value;
 
-    if (status == VpnStatus.connected) {
-      repo.disconnect();
-    } else {
-      repo.connect();
-      await updatePing();
-    }
+    status == VpnStatus.connected ? repo.disconnect() : repo.connect();
   }
 
   Future<void> updatePing() async {

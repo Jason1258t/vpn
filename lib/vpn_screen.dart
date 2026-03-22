@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:vpn/theme.dart';
 import 'package:vpn/theme_provider.dart';
+import 'package:vpn/vpn_power_button.dart';
 import 'package:vpn/vpn_provider.dart';
-import 'package:vpn/vpn_repository.dart';
+import 'package:vpn/vpn_status.dart';
 
 class VpnScreen extends ConsumerWidget {
   const VpnScreen({super.key});
@@ -56,7 +57,6 @@ class VpnScreen extends ConsumerWidget {
           child: Column(
             children: [
               const SizedBox(height: 60),
-              // Статус подключения
               Text(
                 mapStatus(status),
                 style: TextStyle(
@@ -77,7 +77,7 @@ class VpnScreen extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: 12),
-              if (isConnecting)...[Text("Connecting, please wait...")],
+              if (isConnecting) ...[Text("Connecting, please wait...")],
               const Spacer(),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -93,15 +93,19 @@ class VpnScreen extends ConsumerWidget {
                   ),
                 ),
                 child: CupertinoListTile(
+                  padding: EdgeInsets.symmetric(vertical: 0, horizontal: 4),
+                  leadingToTitle: 12,
                   leading: const Icon(
                     CupertinoIcons.globe,
                     color: VpnTheme.primary,
                   ),
-                  title: const Text('Sweden - Stockholm'),
+                  title: const Text('🇸🇪 Sweden - Stockholm'),
                   trailing: Text(
-                    '${pingAsync.value ?? 5000} ms',
+                    '${pingAsync.value ?? defaultPingValue} ms',
                     style: TextStyle(
-                      color: mapPingToColor(pingAsync.value ?? 5000),
+                      color: mapPingToColor(
+                        pingAsync.value ?? defaultPingValue,
+                      ),
                     ),
                   ),
                   onTap: () {},
@@ -110,44 +114,6 @@ class VpnScreen extends ConsumerWidget {
               const SizedBox(height: 40),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class VpnPowerButton extends StatelessWidget {
-  const VpnPowerButton({super.key, required this.enabled, required this.onTap});
-
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 220,
-      height: 220,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: VpnTheme.primary.withOpacity(0.2),
-            blurRadius: 40,
-            spreadRadius: 5,
-          ),
-        ],
-        border: enabled ? null : Border.all(color: VpnTheme.primary, width: 3),
-        gradient: enabled
-            ? RadialGradient(colors: [VpnTheme.primary, Color(0xFF3C096C)])
-            : null,
-      ),
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed: onTap,
-        child: const Icon(
-          CupertinoIcons.power,
-          size: 80,
-          color: CupertinoColors.white,
         ),
       ),
     );

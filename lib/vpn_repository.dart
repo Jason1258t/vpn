@@ -1,23 +1,16 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:developer';
-import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_v2ray/flutter_v2ray.dart';
 import 'package:rxdart/rxdart.dart';
-
-enum VpnStatus { disconnected, connection, connected }
-
-// Предполагаемая константа
-const String baseSubscriptionUrl =
-    'vless://ad87aeca-bec5-48b4-bfe2-50d37d15f5e5@89.22.226.178:8443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=FIwSyEwgTqSgMWMlN0kP9Aw5V6C2_k4-kvNSDa7B9kQ&sid=83cabdf6e9d5aef4&type=tcp#RealityVPN';
+import 'package:vpn/vpn_status.dart';
 
 class VpnRepository {
   late final FlutterV2ray _v2ray;
   final BehaviorSubject<VpnStatus> status;
 
-  // Список распарсенных конфигураций (VLESS, VMess, Trojan и т.д.)
-  List<String> _configs = [
-    FlutterV2ray.parseFromURL(baseSubscriptionUrl).getFullConfiguration(),
+  final List<V2RayURL> _configs = [
+    FlutterV2ray.parseFromURL(dotenv.get("BASE_URL")),
   ];
 
   VpnRepository() : status = BehaviorSubject.seeded(VpnStatus.disconnected) {
@@ -46,18 +39,17 @@ class VpnRepository {
     }
   }
 
-  /// Подключение по индексу, имитируя старое поведение
-  Future<void> connect({int serverIndex = 0}) async {
-    if (_configs.isEmpty || serverIndex >= _configs.length) {
+  Future<void> connect() async {
+    if (_configs.isEmpty) {
       log('configs is empty');
       return;
     }
 
-    final config = _configs[serverIndex];
+    final config = _configs.first;
     if (await _v2ray.requestPermission()) {
       await _v2ray.startV2Ray(
-        remark: 'Server $serverIndex',
-        config: config,
+        remark: 'Server ${config.remark}',
+        config: config.getFullConfiguration(),
         proxyOnly: false,
       );
     }
@@ -67,15 +59,26 @@ class VpnRepository {
     await _v2ray.stopV2Ray();
   }
 
-  /// Пинг конкретного сервера из подписки
-  Future<int> ping({int serverIndex = 0}) async {
-    if ((await status.last) == VpnStatus.connected) {
-      return _v2ray.getConnectedServerDelay();
+  Future<int> ping() async {
+    log("ping requested");
+    try {
+      final result = (await status.last) == VpnStatus.connected
+          ? await _getPingConnected()
+          : await _getPingToBaseServer();
+
+      log("ping: $result ms");
+      return result;
+    } catch (e) {
+      log(e.toString());
+      return -1;
     }
+  }
 
-    if (_configs.isEmpty || serverIndex >= _configs.length) return -1;
+  Future<int> _getPingConnected() => _v2ray.getConnectedServerDelay();
 
-    return _v2ray.getServerDelay(config: _configs[serverIndex]);
+  Future<int> _getPingToBaseServer() async {
+    if (_configs.isEmpty) throw Exception("Base configuration not found");
+    return _v2ray.getServerDelay(config: _configs.first.getFullConfiguration());
   }
 
   void dispose() {
