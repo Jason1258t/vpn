@@ -2,10 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:vpn/theme.dart';
-import 'package:vpn/theme_provider.dart';
+import 'package:vpn/data/theme_provider.dart';
 import 'package:vpn/vpn_power_button.dart';
-import 'package:vpn/vpn_provider.dart';
-import 'package:vpn/vpn_status.dart';
+import 'package:vpn/data/vpn_provider.dart';
+
+import 'vpn_service/services/vpn_status.dart';
 
 class VpnScreen extends ConsumerWidget {
   const VpnScreen({super.key});
@@ -22,9 +23,27 @@ class VpnScreen extends ConsumerWidget {
         return 'DISCONNECTED';
       case VpnStatus.connected:
         return 'CONNECTED';
-      case VpnStatus.connection:
+      case VpnStatus.connecting:
         return 'CONNECTING';
+      case VpnStatus.error:
+        return 'ERROR';
+      default:
+        return 'MEOW';
     }
+  }
+
+  Color mapStatusColor(VpnStatus status, bool isDark) {
+    Color statusColor;
+
+    if (status == VpnStatus.error) {
+      statusColor = Colors.red;
+    } else if (status == VpnStatus.connected) {
+      statusColor = Colors.green;
+    } else {
+      statusColor = isDark ? CupertinoColors.systemGrey : CupertinoColors.black;
+    }
+
+    return statusColor;
   }
 
   @override
@@ -36,8 +55,9 @@ class VpnScreen extends ConsumerWidget {
 
     final status = statusAsync.value ?? VpnStatus.disconnected;
     final isConnected = status == VpnStatus.connected;
-    final isConnecting = status == VpnStatus.connection;
+    final isConnecting = status == VpnStatus.connecting;
 
+    final Color statusColor = mapStatusColor(status, isDark);
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: const Text('ZXC VPN'),
@@ -46,9 +66,7 @@ class VpnScreen extends ConsumerWidget {
           child: Icon(
             isDark ? CupertinoIcons.moon_fill : CupertinoIcons.sun_max_fill,
           ),
-          onPressed: () {
-            ref.read(appThemeProvider.notifier).toggle();
-          },
+          onPressed: () => _switchTheme(context),
         ),
       ),
       child: SafeArea(
@@ -63,9 +81,7 @@ class VpnScreen extends ConsumerWidget {
                   letterSpacing: 4,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: isDark
-                      ? CupertinoColors.systemGrey
-                      : CupertinoColors.black,
+                  color: statusColor,
                 ),
               ),
               const Spacer(),
@@ -115,6 +131,27 @@ class VpnScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  _switchTheme(BuildContext context) async {
+    await showCupertinoDialog(
+      context: context,
+      builder: (_) => CupertinoAlertDialog(
+        title: Text("Предупреждение"),
+        content: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            "Тебе не надо менять тему, поверь. Там такой ужас пока, из-за того что разрабу плевать на светлую тему",
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: Text("Ок", style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
     );
   }

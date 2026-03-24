@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:vpn/theme.dart';
-import 'package:vpn/theme_provider.dart';
+import 'package:vpn/data/theme_provider.dart';
 import 'package:vpn/vpn_screen.dart';
 
 void main() async {
