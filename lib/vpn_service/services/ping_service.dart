@@ -68,7 +68,6 @@ class PingService {
   /// и возвращает RTT в мс или ошибку.
   static Future<int> _nativePing(VpnConfig config) async {
     try {
-      log('config: ${config.fullConfiguration}');
       final result = await _channel.invokeMethod<String>('ping', {
         'configJson': config.fullConfiguration
         // 'configJson': testConfig

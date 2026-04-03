@@ -5,19 +5,21 @@ import 'package:rxdart/rxdart.dart';
 import 'package:vpn/vpn_service/vpn_service.dart';
 
 class VpnRepository {
-  final VpnService vpn = VpnService.instance;
+  final VpnService _vpn = VpnService.instance;
 
-  BehaviorSubject<VpnStatus> get status => vpn.status
+  BehaviorSubject<VpnStatus> get status => _vpn.status
     ..stream.listen((s) {
       _currentStatus = s;
     });
   VpnStatus _currentStatus = VpnStatus.disconnected;
 
-  final _baseConfig = VpnService.parseUrl(dotenv.get('BASE_URL'));
+  static final _baseConfigUrl = dotenv.get('BASE_URL');
+  static final _baseConfig = VpnService.parseUrl(_baseConfigUrl);
 
-  Future<void> connect() => vpn.connect(_baseConfig);
+  // Future<void> connect() => _vpn.connect(_baseConfig);
+  Future<void> connect() => _vpn.connectBuUrl(_baseConfigUrl);
 
-  Future<void> disconnect() => vpn.disconnect();
+  Future<void> disconnect() => _vpn.disconnect();
 
   Future<int> ping() async {
     log("ping requested, using $_currentStatus method to ping");

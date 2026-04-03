@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:rxdart/rxdart.dart';
 import 'package:vpn/vpn_service/models/vpn_config.dart';
@@ -60,6 +61,25 @@ class VpnService {
       // final json = testConfig;
 
       await VpnChannelContract.invokeConnect(json);
+    } catch (e, st) {
+      _activeConfig = null;
+      status.add(VpnStatus.error);
+      // Re-throw so the UI layer can surface an error message.
+      Error.throwWithStackTrace(VpnException('Failed to start tunnel: $e'), st);
+    }
+  }
+
+  Future<void> connectBuUrl(String url) async {
+    if (status.value == VpnStatus.connected ||
+        status.value == VpnStatus.connecting) {
+      await disconnect();
+    }
+
+    status.add(VpnStatus.connecting);
+
+    try {
+      log('connecting to url: $url');
+      await VpnChannelContract.invokeConnect(url);
     } catch (e, st) {
       _activeConfig = null;
       status.add(VpnStatus.error);

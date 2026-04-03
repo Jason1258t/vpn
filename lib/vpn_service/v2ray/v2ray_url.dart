@@ -14,11 +14,11 @@ abstract class V2RayURL {
   String get address => '';
   String get remark => '';
 
-  // ── inbound (local SOCKS proxy) ──────────────────────────────────────────
+  // ── inbound (local SOCKS proxy — только для ping) ────────────────────────
 
   Map<String, dynamic> inbound = {
     'tag': 'proxy_in',
-    'port': 10808, // Используем более безопасный порт
+    'port': 10808,
     'protocol': 'socks',
     'listen': '127.0.0.1',
     'settings': {
@@ -27,8 +27,23 @@ abstract class V2RayURL {
       'userLevel': 8,
     },
     'sniffing': {
-      'enabled': true, // ОБЯЗАТЕЛЬНО TRUE
-      'destOverride': ['http', 'tls', 'quic'], // Позволяет ядру видеть домены
+      'enabled': true,
+      'destOverride': ['http', 'tls', 'quic'],
+    },
+  };
+
+  // ── inbound (TUN — для реального VPN трафика) ────────────────────────────
+  // fd передаётся ядру через env XRAY_TUN_FD из XrayVpnService.kt
+
+  Map<String, dynamic> tunInbound = {
+    'tag': 'tun-in',
+    'protocol': 'tun',
+    'settings': {
+      'network': 'tcp,udp',
+    },
+    'sniffing': {
+      'enabled': true,
+      'destOverride': ['http', 'tls', 'quic'],
     },
   };
 
@@ -66,19 +81,20 @@ abstract class V2RayURL {
     'rules': [
       {
         'type': 'field',
-        'outboundTag': 'proxy', // Тег вашего VLESS выхода
+        'inboundTag': ['tun-in', 'proxy_in'], // оба источника → proxy outbound
+        'outboundTag': 'proxy',
         'network': 'tcp,udp',
       }
     ],
   };
 
   Map<String, dynamic> get fullConfiguration => {
-        'log': log,
-        'inbounds': [inbound],
-        'outbounds': [outbound1, outbound2, outbound3],
-        'dns': dns,
-        'routing': routing,
-      };
+    'log': log,
+    'inbounds': [tunInbound, inbound], // tun первым
+    'outbounds': [outbound1, outbound2, outbound3],
+    'dns': dns,
+    'routing': routing,
+  };
 
   /// Returns pretty-printed V2Ray JSON.
   String getFullConfiguration({int indent = 2}) {
@@ -141,7 +157,7 @@ abstract class V2RayURL {
             'method': 'GET',
           };
           final hosts = streamSetting['tcpSettings']['header']['request']
-              ['headers']['Host'] as List;
+          ['headers']['Host'] as List;
           if (hosts.isNotEmpty) sni = hosts.first as String;
         } else {
           streamSetting['tcpSettings']['header']['type'] = 'none';
