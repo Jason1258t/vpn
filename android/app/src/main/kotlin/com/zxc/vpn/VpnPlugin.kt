@@ -14,6 +14,7 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
+import android.os.Build
 
 
 class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ActivityAware, PluginRegistry.ActivityResultListener {
@@ -47,9 +48,19 @@ class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.S
         )
     }
 
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val permission = android.Manifest.permission.POST_NOTIFICATIONS
+            if (context?.checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                activity?.requestPermissions(arrayOf(permission), 102)
+            }
+        }
+    }
+
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "connect" -> {
+                checkNotificationPermission()
                 val config = call.argument<String>("config")
                 if (config.isNullOrEmpty()) {
                     result.error("INVALID_ARGUMENT", "Конфигурация не может быть пустой", null)
@@ -65,29 +76,6 @@ class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.S
                 }
                 context?.startService(intent)
                 result.success(true)
-            }
-            "ping" -> {
-                val config = call.argument<String>("configJson")
-                val isUrl = config?.startsWith("vless://") ?: false
-
-                // Создаем интенс для выполнения пинга в контексте сервиса
-                val intent = Intent(context, XrayVpnService::class.java).apply {
-                    action = XrayVpnService.ACTION_PING
-                    putExtra(XrayVpnService.EXTRA_CONFIG, config)
-                    putExtra(XrayVpnService.EXTRA_IS_URL, isUrl)
-                }
-
-                // Мы не можем использовать startService для получения результата напрямую,
-                // поэтому для мгновенного пинга (без задействования жизненного цикла сервиса)
-                // лучше вызвать статический метод или синглтон, если сервис запущен.
-                // Но самый чистый путь для текущей структуры — добавить метод в сам сервис.
-
-                Thread {
-                    val delay = XrayVpnService.calculatePing(context!!, config ?: "", isUrl)
-                    activity?.runOnUiThread {
-                        result.success(delay.toString())
-                    }
-                }.start()
             }
             else -> result.notImplemented()
         }

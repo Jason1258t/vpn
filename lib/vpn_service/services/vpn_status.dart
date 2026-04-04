@@ -1,3 +1,3 @@
 enum VpnStatus { disconnected, connecting, connected, error }
 
-const int defaultPingValue = 5000;
+const int defaultPingValue = 9999;

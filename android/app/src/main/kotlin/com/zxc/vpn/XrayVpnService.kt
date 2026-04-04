@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -16,18 +17,20 @@ import libXray.DialerController
 import libXray.LibXray
 import org.json.JSONArray
 import org.json.JSONObject
+import t2s.Key
+import t2s.T2s
 
 class XrayVpnService : VpnService() {
 
     companion object {
         const val TAG = "XrayVpnService"
+
         const val ACTION_CONNECT = "com.zxc.vpn.CONNECT"
         const val ACTION_DISCONNECT = "com.zxc.vpn.DISCONNECT"
-        const val ACTION_PING = "com.zxc.vpn.PING"
-        const val EXTRA_CONFIG = "config_data"
-        const val EXTRA_IS_URL = "is_url"
 
         const val BROADCAST_STATUS = "com.zxc.vpn.STATUS"
+        const val EXTRA_CONFIG = "config_data"
+        const val EXTRA_IS_URL = "is_url"
         const val EXTRA_STATUS = "status"
 
         const val STATUS_CONNECTING = "connecting"
@@ -37,192 +40,200 @@ class XrayVpnService : VpnService() {
 
         private const val NOTIFICATION_CHANNEL_ID = "vpn_xray_channel"
         private const val NOTIFICATION_ID = 101
+        private const val SOCKS_PORT = 10808
 
-        // Синглтон для доступа к логике конфигов извне (для пинга)
         @JvmStatic
         var instance: XrayVpnService? = null
             private set
-
-        /**
-         * Статический метод пинга, вызываемый из VpnPlugin
-         */
-        fun calculatePing(context: Context, configData: String, isUrl: Boolean): Long {
-            return try {
-                // Пытаемся получить текущий инстанс или создаем временный для доступа к методам трансформации
-                val service = instance ?: XrayVpnService()
-
-                val finalJson = if (isUrl) {
-                    service.buildConfigFromUrl(configData, 0)
-                } else {
-                    service.buildConfigFromJson(configData, 0)
-                }
-
-                if (finalJson.isEmpty()) return -1
-
-                val pingRequest = JSONObject().apply {
-                    put("datDir", context.filesDir.absolutePath)
-                    put("configPath", "")
-                    put("timeout", 5000)
-                    put("url", "https://www.google.com/generate_204")
-                    put("proxy", finalJson)
-                }
-
-                val requestB64 = Base64.encodeToString(pingRequest.toString().toByteArray(), Base64.NO_WRAP)
-                val resultB64 = LibXray.ping(requestB64)
-
-                val decodedResult = String(Base64.decode(resultB64, Base64.DEFAULT))
-                val resultJson = JSONObject(decodedResult)
-
-                if (resultJson.optBoolean("success")) {
-                    resultJson.optLong("data", -1)
-                } else {
-                    -1
-                }
-            } catch (e: Exception) {
-                Log.e("XrayPing", "Ping failed: ${e.message}")
-                -1
-            }
-        }
     }
 
     private var tunInterface: ParcelFileDescriptor? = null
     private var isRunning = false
 
+    // ── lifecycle ────────────────────────────────────────────────────────────
+
     override fun onCreate() {
         super.onCreate()
         instance = this
-
-        val controller = object : DialerController {
-            override fun protectFd(fd: Long): Boolean {
-                return protect(fd.toInt())
-            }
-        }
-
-        LibXray.registerDialerController(controller)
-        LibXray.registerListenerController(controller)
+        registerXrayDialer()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: return START_NOT_STICKY
-
-        when (action) {
-            ACTION_DISCONNECT -> stopTunnel()
+        when (intent?.action) {
             ACTION_CONNECT -> {
-                val configData = intent.getStringExtra(EXTRA_CONFIG) ?: return START_NOT_STICKY
+                val config = intent.getStringExtra(EXTRA_CONFIG) ?: return START_NOT_STICKY
                 val isUrl = intent.getBooleanExtra(EXTRA_IS_URL, false)
-
-                startForeground(NOTIFICATION_ID, buildNotification("Установка соединения..."))
+                startForegroundCompat(buildNotification("Установка соединения..."))
                 broadcastStatus(STATUS_CONNECTING)
-
-                Thread { executeConnection(configData, isUrl) }.start()
+                Thread { executeConnection(config, isUrl) }.start()
             }
+            ACTION_DISCONNECT -> stopTunnel()
         }
         return START_STICKY
     }
 
+    override fun onDestroy() {
+        instance = null
+        super.onDestroy()
+    }
+
+    // ── connection ───────────────────────────────────────────────────────────
+
     private fun executeConnection(configData: String, isUrl: Boolean) {
         try {
-            if (isRunning) {
-                LibXray.stopXray()
-                tunInterface?.close()
-            }
+            // Останавливаем предыдущую сессию если она была
+            if (isRunning) teardown()
 
-            tunInterface = establishTunInterface() ?: throw Exception("Не удалось создать TUN интерфейс")
+            // 1. Собираем конфиг xray с socks inbound
+            val xrayConfig = if (isUrl) buildXrayConfigFromUrl(configData)
+            else buildXrayConfigFromJson(configData)
+            Log.w(TAG, "Xray config: $xrayConfig")
 
-            val finalJsonConfig = if (isUrl) {
-                buildConfigFromUrl(configData, tunInterface!!.fd)
-            } else {
-                buildConfigFromJson(configData, tunInterface!!.fd)
-            }
-
-            Log.w(TAG, "Конфигурация Xray: $finalJsonConfig")
-
+            // 2. Запускаем xray — он начнёт слушать SOCKS на 127.0.0.1:SOCKS_PORT
             val requestB64 = LibXray.newXrayRunFromJSONRequest(
-                filesDir.absolutePath,
-                "",
-                finalJsonConfig
+                filesDir.absolutePath, "", xrayConfig
             )
-
             val resultB64 = LibXray.runXrayFromJSON(requestB64)
             val resultDecoded = String(Base64.decode(resultB64, Base64.DEFAULT))
             val resultJson = JSONObject(resultDecoded)
+            Log.d(TAG, "Xray result: $resultDecoded")
 
-            if (resultJson.optBoolean("success") && LibXray.getXrayState()) {
-                isRunning = true
-                broadcastStatus(STATUS_CONNECTED)
-                updateNotification("VPN активен")
-            } else {
-                throw Exception("Ядро Xray отклонило конфигурацию: ${resultJson.optString("error")}")
+            if (!resultJson.optBoolean("success") || !LibXray.getXrayState()) {
+                throw Exception("Xray rejected config: ${resultJson.optString("error")}")
             }
+
+            // 3. Создаём TUN интерфейс — после этого Android рисует VPN-иконку
+            tunInterface = establishTunInterface()
+                ?: throw Exception("Failed to establish TUN interface")
+            Log.d(TAG, "TUN fd: ${tunInterface!!.fd}")
+
+            // 4. tun2socks читает IP-пакеты из TUN fd и проксирует через xray SOCKS
+            startTun2Socks(tunInterface!!.fd)
+
+            isRunning = true
+            broadcastStatus(STATUS_CONNECTED)
+            updateNotification("VPN активен")
+
         } catch (e: Exception) {
-            Log.e(TAG, "Ошибка при запуске туннеля", e)
+            Log.e(TAG, "Connection failed: ${e.message}", e)
             handleFatalError()
         }
     }
+
+    // ── tun ──────────────────────────────────────────────────────────────────
 
     private fun establishTunInterface(): ParcelFileDescriptor? {
         return Builder()
             .setSession("XrayVPN")
             .setMtu(1500)
-            .addAddress("10.0.0.2", 32)
-            .addAddress("fd00::2", 126)
-            .addRoute("0.0.0.0", 0)
-            .addRoute("::", 0)
+            .addAddress("10.0.0.2", 30)
+            .addRoute("0.0.0.0", 0)       // весь IPv4 через тоннель
+            .addRoute("::", 0)             // весь IPv6 через тоннель
+            .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
-            .addDnsServer("2001:4860:4860::8888")
+            // Само приложение выводим из тоннеля —
+            // иначе SOCKS-трафик xray попадёт обратно в TUN → петля
+            .addDisallowedApplication(packageName)
             .establish()
     }
 
-    fun buildConfigFromUrl(url: String, fd: Int): String {
-        val urlBase64 = Base64.encodeToString(url.toByteArray(), Base64.NO_WRAP)
-        val responseB64 = LibXray.convertShareLinksToXrayJson(urlBase64)
-        val decodedResponse = String(Base64.decode(responseB64, Base64.DEFAULT))
+    // ── tun2socks ────────────────────────────────────────────────────────────
 
-        val responseJson = JSONObject(decodedResponse)
-        if (!responseJson.optBoolean("success")) {
-            throw Exception("Ошибка конвертации ссылки в JSON")
+    private fun startTun2Socks(fd: Int) {
+        // protect() нужен чтобы tun2socks→xray соединения
+        // шли через физический интерфейс, а не обратно в TUN
+        protect(fd)
+
+        val key = Key().apply {
+            setDevice("fd://$fd")
+            setProxy("socks5://127.0.0.1:$SOCKS_PORT")
+            setLogLevel("warning")
+            setMTU(1500L)
         }
 
-        val baseConfig = responseJson.getJSONObject("data")
-        return injectTunAndRouting(baseConfig, fd)
+        // start() блокирующий — запускаем в отдельном потоке
+        Thread {
+            T2s.start(key)
+        }.apply {
+            name = "tun2socks"
+            isDaemon = true
+            start()
+        }
     }
 
-    fun buildConfigFromJson(rawJson: String, fd: Int): String {
-        return injectTunAndRouting(JSONObject(rawJson), fd)
+    private fun stopTun2Socks() {
+        try {
+            T2s.stop()
+        } catch (e: Exception) {
+            Log.w(TAG, "tun2socks stop error: ${e.message}")
+        }
     }
 
-    private fun injectTunAndRouting(config: JSONObject, fd: Int): String {
-        val tunInbound = JSONObject().apply {
-            put("protocol", "tun")
-            put("tag", "tun-inbound")
+    // ── xray config builders ─────────────────────────────────────────────────
+
+    private fun buildXrayConfigFromUrl(url: String): String {
+        val urlB64 = Base64.encodeToString(url.toByteArray(), Base64.NO_WRAP)
+        val responseB64 = LibXray.convertShareLinksToXrayJson(urlB64)
+        val decoded = String(Base64.decode(responseB64, Base64.DEFAULT))
+        val response = JSONObject(decoded)
+
+        if (!response.optBoolean("success")) {
+            throw Exception("Link conversion failed: ${response.optString("error")}")
+        }
+
+        return injectSocksInbound(response.getJSONObject("data"))
+    }
+
+    private fun buildXrayConfigFromJson(rawJson: String): String {
+        return injectSocksInbound(JSONObject(rawJson))
+    }
+
+    /**
+     * Заменяет inbounds на socks для tun2socks, чистит outbound от мусора
+     * который генерирует convertShareLinksToXrayJson, фиксирует vnext/reality.
+     */
+    private fun injectSocksInbound(config: JSONObject): String {
+        // Socks inbound — точка входа для tun2socks
+        val socksInbound = JSONObject().apply {
+            put("tag", "socks-in")
+            put("protocol", "socks")
+            put("listen", "127.0.0.1")
+            put("port", SOCKS_PORT)
             put("settings", JSONObject().apply {
-                put("fd", fd)
-                put("mtu", 1400)
+                put("auth", "noauth")
+                put("udp", true)
             })
             put("sniffing", JSONObject().apply {
                 put("enabled", true)
                 put("destOverride", JSONArray(listOf("http", "tls", "quic")))
             })
         }
+        config.put("inbounds", JSONArray().apply { put(socksInbound) })
 
-        val outboundsArray = config.optJSONArray("outbounds") ?: JSONArray()
-        if (outboundsArray.length() > 0) {
-            val proxy = outboundsArray.getJSONObject(0)
+        val outbounds = config.optJSONArray("outbounds") ?: JSONArray()
+
+        // Чистим первый outbound (proxy)
+        if (outbounds.length() > 0) {
+            val proxy = outbounds.getJSONObject(0)
+
+            // Фиксируем tag и убираем мусорные поля
             proxy.put("tag", "proxy")
             proxy.remove("sendThrough")
 
+            // Фикс vnext: null — optJSONArray вернёт null и если поля нет,
+            // и если оно явно null, в отличие от has()
             if (proxy.optString("protocol") == "vless") {
-                val oldSettings = proxy.getJSONObject("settings")
-                if (!oldSettings.has("vnext")) {
+                val settings = proxy.optJSONObject("settings") ?: JSONObject()
+                if (settings.optJSONArray("vnext") == null) {
                     val user = JSONObject().apply {
-                        put("id", oldSettings.optString("id"))
-                        put("flow", oldSettings.optString("flow").ifEmpty { "xtls-rprx-vision" })
+                        put("id", settings.optString("id"))
+                        put("flow", settings.optString("flow").ifEmpty { "xtls-rprx-vision" })
                         put("encryption", "none")
                         put("level", 0)
                     }
                     val server = JSONObject().apply {
-                        put("address", oldSettings.optString("address"))
-                        put("port", oldSettings.optInt("port"))
+                        put("address", settings.optString("address"))
+                        put("port", settings.optInt("port"))
                         put("users", JSONArray().apply { put(user) })
                     }
                     proxy.put("settings", JSONObject().apply {
@@ -231,87 +242,146 @@ class XrayVpnService : VpnService() {
                 }
             }
 
+            // Чистим realitySettings — убираем серверные поля, оставляем клиентские
             val streamSettings = proxy.optJSONObject("streamSettings")
             val oldReality = streamSettings?.optJSONObject("realitySettings")
             if (oldReality != null) {
                 val pubKey = oldReality.optString("publicKey")
                     .ifEmpty { oldReality.optString("password") }
                     .ifEmpty { oldReality.optString("pbk") }
-                val sni = oldReality.optString("serverName").ifEmpty { oldReality.optString("sni") }
+                val sni = oldReality.optString("serverName")
+                    .ifEmpty { oldReality.optString("sni") }
 
-                val cleanReality = JSONObject().apply {
+                streamSettings.put("realitySettings", JSONObject().apply {
                     put("show", false)
                     put("fingerprint", oldReality.optString("fingerprint").ifEmpty { "chrome" })
                     put("serverName", sni)
                     put("publicKey", pubKey)
                     put("shortId", oldReality.optString("shortId"))
                     put("spiderX", "/")
-                }
-                streamSettings.put("realitySettings", cleanReality)
+                })
                 streamSettings.put("security", "reality")
             }
         }
 
-        return JSONObject().apply {
-            put("inbounds", JSONArray().apply { put(tunInbound) })
-            put("outbounds", outboundsArray)
-            put("routing", JSONObject().apply {
-                put("domainStrategy", "AsIs")
-                put("rules", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("type", "field")
-                        put("inboundTag", JSONArray(listOf("tun-inbound")))
-                        put("outboundTag", "proxy")
-                    })
-                })
+        // Гарантируем наличие freedom и blackhole
+        val existingTags = (0 until outbounds.length())
+            .map { outbounds.getJSONObject(it).optString("tag") }
+            .toSet()
+
+        if ("direct" !in existingTags) {
+            outbounds.put(JSONObject().apply {
+                put("tag", "direct")
+                put("protocol", "freedom")
+                put("settings", JSONObject())
             })
-        }.toString()
+        }
+        if ("block" !in existingTags) {
+            outbounds.put(JSONObject().apply {
+                put("tag", "block")
+                put("protocol", "blackhole")
+                put("settings", JSONObject())
+            })
+        }
+        config.put("outbounds", outbounds)
+
+        config.put("routing", JSONObject().apply {
+            put("domainStrategy", "IPIfNonMatch")
+            put("rules", JSONArray())
+        })
+        config.put("log", JSONObject().apply { put("loglevel", "warning") })
+
+        // Убираем null-поля которые xray не понимает
+        listOf("dns", "transport", "policy", "api", "metrics", "stats",
+            "reverse", "fakeDns", "observatory", "burstObservatory", "version")
+            .forEach { config.remove(it) }
+
+        return config.toString()
     }
 
+    // ── stop / error ─────────────────────────────────────────────────────────
+
     private fun stopTunnel() {
-        if (isRunning) {
-            LibXray.stopXray()
-            isRunning = false
-        }
-        tunInterface?.close()
-        tunInterface = null
+        teardown()
         broadcastStatus(STATUS_DISCONNECTED)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     private fun handleFatalError() {
-        stopTunnel()
+        teardown()
         broadcastStatus(STATUS_ERROR)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /** Останавливает xray и tun2socks, закрывает TUN fd. */
+    private fun teardown() {
+        if (isRunning) {
+            try { LibXray.stopXray() } catch (e: Exception) {
+                Log.w(TAG, "xray stop error: ${e.message}")
+            }
+            stopTun2Socks()
+            isRunning = false
+        }
+        try { tunInterface?.close() } catch (e: Exception) {
+            Log.w(TAG, "tunInterface close error: ${e.message}")
+        }
+        tunInterface = null
+    }
+
+    // ── xray dialer protection ────────────────────────────────────────────────
+
+    /**
+     * Регистрируем protect() для xray — без этого исходящие соединения xray
+     * пойдут обратно в TUN и создадут петлю.
+     */
+    private fun registerXrayDialer() {
+        val controller = object : DialerController {
+            override fun protectFd(fd: Long): Boolean = protect(fd.toInt())
+        }
+        LibXray.registerDialerController(controller)
+        LibXray.registerListenerController(controller)
+    }
+
+    // ── notification ─────────────────────────────────────────────────────────
+
+    private fun startForegroundCompat(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID, notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun buildNotification(text: String): Notification {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID, "VPN статус",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .createNotificationChannel(channel)
+        }
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("Защищённое соединение")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun updateNotification(text: String) {
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIFICATION_ID, buildNotification(text))
     }
 
     private fun broadcastStatus(status: String) {
         LocalBroadcastManager.getInstance(this).sendBroadcast(
             Intent(BROADCAST_STATUS).putExtra(EXTRA_STATUS, status)
         )
-    }
-
-    private fun buildNotification(contentText: String): Notification {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, "Состояние VPN", NotificationManager.IMPORTANCE_LOW)
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Защищенное соединение")
-            .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setOngoing(true)
-            .build()
-    }
-
-    private fun updateNotification(contentText: String) {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildNotification(contentText))
-    }
-
-    override fun onDestroy() {
-        instance = null
-        super.onDestroy()
     }
 }

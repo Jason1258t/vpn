@@ -45,6 +45,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+
         }
         // На случай если в транзитивных зависимостях окажется второй go-рантайм —
         // выбираем первый найденный и подавляем ошибку дублей для go.*
@@ -66,7 +67,10 @@ dependencies {
     // НЕ добавляй сюда libv2ray.aar или любой другой gomobile-собранный .aar:
     // у каждого из них внутри свой go runtime (go.Seq и т.д.), два рантайма
     // в одном apk — это Duplicate class и краш при старте.
-    implementation(files("libs/libXray.aar"))
+//    implementation(files("libs/libXray.aar"))
+//    implementation(files("libs/tun2socks.aar"))
+//    implementation(files("libs/tun2socks_fixed.aar"))
+    implementation(files("libs/combined.aar"))
 
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     implementation("androidx.core:core-ktx:1.12.0")

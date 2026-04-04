@@ -70,11 +70,7 @@ class VpnService {
   }
 
   Future<void> connectBuUrl(String url) async {
-    if (status.value == VpnStatus.connected ||
-        status.value == VpnStatus.connecting) {
-      await disconnect();
-    }
-
+    await disconnect();
     status.add(VpnStatus.connecting);
 
     try {
@@ -90,10 +86,9 @@ class VpnService {
 
   /// Stop the active tunnel.
   Future<void> disconnect() async {
+    if (status.value == VpnStatus.disconnected) return;
     await VpnChannelContract.invokeDisconnect();
     _activeConfig = null;
-    // Status will flip to disconnected once the native event arrives,
-    // but we pre-set it so the UI is immediately responsive.
     status.add(VpnStatus.disconnected);
   }
 
@@ -117,10 +112,7 @@ class VpnService {
   /// Only meaningful while [status] == [VpnStatus.connected].
   /// Returns [defaultPingValue] if not connected or on error.
   static Future<int> pingConnected() async {
-    if (instance.status.value != VpnStatus.connected) {
-      return defaultPingValue;
-    }
-    return PingService.httpPingThroughProxy();
+    throw UnimplementedError();
   }
 
   // ── native event bridge ────────────────────────────────────────────────────
