@@ -26,11 +26,13 @@ class PingService {
   /// Android: делегирует в LibXray.ping — встроенный RTT-замер.
   /// iOS / desktop: TCP handshake через Socket.connect.
   /// Возвращает [defaultPingValue] при таймауте или недоступности.
-  static Future<int> ping(VpnConfig config) async {
+  static Future<int> ping(String config) async {
     if (Platform.isAndroid) {
       return _nativePing(config);
     }
-    return tcpPing(config);
+
+    return -1;
+    // return tcpPing(config);
   }
 
   /// HTTP-пинг через активный SOCKS5-прокси туннеля (127.0.0.1:1080).
@@ -66,10 +68,10 @@ class PingService {
   /// LibXray.ping принимает JSON вида:
   /// {"url":"https://host:port","timeout":5000}
   /// и возвращает RTT в мс или ошибку.
-  static Future<int> _nativePing(VpnConfig config) async {
+  static Future<int> _nativePing(String config) async {
     try {
       final result = await _channel.invokeMethod<String>('ping', {
-        'configJson': config.fullConfiguration
+        'configJson': config
         // 'configJson': testConfig
       });
       return int.tryParse(result ?? '') ?? defaultPingValue;

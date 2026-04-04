@@ -39,7 +39,7 @@ class VpnRepository {
   Future<int> _getPingConnected() => VpnService.pingConnected();
 
   Future<int> _getPingToBaseServer() async {
-    return VpnService.ping(_baseConfig);
+    return VpnService.ping(_baseConfigUrl);
   }
 
   void dispose() {

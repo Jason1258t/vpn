@@ -110,7 +110,7 @@ class VpnService {
   ///
   /// Does **not** require the VPN to be connected.
   /// Returns [defaultPingValue] on timeout / unreachable.
-  static Future<int> ping(VpnConfig config) => PingService.ping(config);
+  static Future<int> ping(String config) => PingService.ping(config);
 
   /// HTTP ping through the active tunnel's local SOCKS proxy, in milliseconds.
   ///

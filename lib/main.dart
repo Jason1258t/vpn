@@ -35,8 +35,8 @@ class VpnApp extends ConsumerWidget {
             ? VpnTheme.gothicBlack
             : CupertinoColors.systemBackground,
         barBackgroundColor: brightness == Brightness.dark
-            ? VpnTheme.surfaceDark.withOpacity(0.8)
-            : CupertinoColors.systemBackground.withOpacity(0.8),
+            ? VpnTheme.surfaceDark.withValues(alpha:  .8)
+            : CupertinoColors.systemBackground.withValues(alpha: .8),
       ),
       home: const VpnScreen(),
     );
