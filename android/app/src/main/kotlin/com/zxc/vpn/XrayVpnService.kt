@@ -1,6 +1,7 @@
 package com.zxc.vpn
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -114,7 +115,7 @@ class XrayVpnService : VpnService() {
 
             isRunning = true
             broadcastStatus(STATUS_CONNECTED)
-            updateNotification("VPN активен")
+            updateNotification("VPN активен", true)
 
         } catch (e: Exception) {
             Log.e(TAG, "Connection failed: ${e.message}", e)
@@ -359,26 +360,66 @@ class XrayVpnService : VpnService() {
         }
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(text: String, showStopwatch: Boolean = false): Notification {
+        // 1. Намерение для открытия приложения
+        // Мы создаем Intent, который указывает на твой MainActivity
+        val contentIntent = Intent(this, MainActivity::class.java).let {
+            PendingIntent.getActivity(
+                this, 0, it,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
+
+        // 2. Намерение для кнопки "Отключить"
+        // Мы шлем ACTION_DISCONNECT в этот же сервис
+        val disconnectIntent = Intent(this, XrayVpnService::class.java).apply {
+            action = ACTION_DISCONNECT
+        }
+        val disconnectPendingIntent = PendingIntent.getService(
+            this, 1, disconnectIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Создаем канал (для Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID, "VPN статус",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                setShowBadge(false) // Убираем точку на иконке приложения
+            }
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                 .createNotificationChannel(channel)
         }
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Защищённое соединение")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setOngoing(true)
-            .build()
+            .setOngoing(true) // Нельзя смахнуть
+            .setOnlyAlertOnce(true)
+            .setContentIntent(contentIntent) // Клик по уведомлению -> Открыть приложение
+            .setAutoCancel(false)
+
+        // Добавляем кнопку "Отключить"
+        // android.R.drawable.ic_menu_close_clear_cancel - системная иконка крестика
+        builder.addAction(
+            android.R.drawable.ic_menu_close_clear_cancel,
+            "Отключить",
+            disconnectPendingIntent
+        )
+
+        if (showStopwatch) {
+            builder.setUsesChronometer(true)
+            builder.setWhen(System.currentTimeMillis())
+        }
+
+        return builder.build()
     }
 
-    private fun updateNotification(text: String) {
+    private fun updateNotification(text: String, stopwatch: Boolean = false) {
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIFICATION_ID, buildNotification(text))
+            .notify(NOTIFICATION_ID, buildNotification(text, stopwatch))
     }
 
     private fun broadcastStatus(status: String) {
