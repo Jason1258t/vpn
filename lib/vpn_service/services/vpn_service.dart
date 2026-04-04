@@ -36,46 +36,23 @@ class VpnService {
   );
 
   /// The config currently in use (null if not connected).
-  VpnConfig? _activeConfig;
+  String? _activeConfig;
 
-  VpnConfig? get activeConfig => _activeConfig;
+  String? get activeConfig => _activeConfig;
 
   // ── connect / disconnect ───────────────────────────────────────────────────
 
-  /// Start the VPN tunnel for [config].
+  /// Start the VPN tunnel for [url].
   ///
-  /// Generates the full Xray/V2Ray JSON and passes it to the native side.
   /// Status transitions: disconnected → connecting (immediately), then
   /// the native side emits connected / disconnected via the event channel.
-  Future<void> connect(VpnConfig config) async {
-    if (status.value == VpnStatus.connected ||
-        status.value == VpnStatus.connecting) {
-      await disconnect();
-    }
-
-    _activeConfig = config;
-    status.add(VpnStatus.connecting);
-
-    try {
-      final json = config.fullConfiguration;
-      // final json = testConfig;
-
-      await VpnChannelContract.invokeConnect(json);
-    } catch (e, st) {
-      _activeConfig = null;
-      status.add(VpnStatus.error);
-      // Re-throw so the UI layer can surface an error message.
-      Error.throwWithStackTrace(VpnException('Failed to start tunnel: $e'), st);
-    }
-  }
-
   Future<void> connectBuUrl(String url) async {
     await disconnect();
     status.add(VpnStatus.connecting);
 
     try {
-      log('connecting to url: $url');
       await VpnChannelContract.invokeConnect(url);
+      _activeConfig = url;
     } catch (e, st) {
       _activeConfig = null;
       status.add(VpnStatus.error);
@@ -89,30 +66,36 @@ class VpnService {
     if (status.value == VpnStatus.disconnected) return;
     await VpnChannelContract.invokeDisconnect();
     _activeConfig = null;
-    status.add(VpnStatus.disconnected);
   }
-
-  // ── parse ──────────────────────────────────────────────────────────────────
-
-  /// Parse a share-link URL into a [VpnConfig].
-  ///
-  /// Throws [FormatException] on invalid / unsupported URLs.
-  static VpnConfig parseUrl(String url) => VpnConfig.fromUrl(url);
 
   // ── ping ───────────────────────────────────────────────────────────────────
 
   /// TCP-handshake ping to the server in [config], in milliseconds.
-  ///
+  ///®
   /// Does **not** require the VPN to be connected.
   /// Returns [defaultPingValue] on timeout / unreachable.
-  static Future<int> ping(String config) => PingService.ping(config);
+  static Future<int> ping(String config) async {
+    try {
+      final res = PingService.pingConfig(config);
+      return res;
+    } catch (e) {
+      log(e.toString());
+      return defaultPingValue;
+    }
+  }
 
   /// HTTP ping through the active tunnel's local SOCKS proxy, in milliseconds.
   ///
   /// Only meaningful while [status] == [VpnStatus.connected].
   /// Returns [defaultPingValue] if not connected or on error.
   static Future<int> pingConnected() async {
-    throw UnimplementedError();
+    try {
+      final res = await PingService.pingConnected();
+      return res;
+    } catch (e) {
+      log(e.toString());
+      return defaultPingValue;
+    }
   }
 
   // ── native event bridge ────────────────────────────────────────────────────

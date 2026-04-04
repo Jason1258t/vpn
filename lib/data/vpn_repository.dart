@@ -14,21 +14,17 @@ class VpnRepository {
   VpnStatus _currentStatus = VpnStatus.disconnected;
 
   static final _baseConfigUrl = dotenv.get('BASE_URL');
-  static final _baseConfig = VpnService.parseUrl(_baseConfigUrl);
 
-  // Future<void> connect() => _vpn.connect(_baseConfig);
   Future<void> connect() => _vpn.connectBuUrl(_baseConfigUrl);
 
   Future<void> disconnect() => _vpn.disconnect();
 
   Future<int> ping() async {
-    log("ping requested, using $_currentStatus method to ping");
     try {
       final result = _currentStatus == VpnStatus.connected
           ? await _getPingConnected()
           : await _getPingToBaseServer();
 
-      log("ping: $result ms");
       return result;
     } catch (e) {
       log(e.toString());

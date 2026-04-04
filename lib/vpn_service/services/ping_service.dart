@@ -1,47 +1,100 @@
 import 'dart:async';
-import 'dart:developer';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
-import 'package:flutter/services.dart';
-import 'package:vpn/vpn_service/services/test_config.dart';
-import 'package:vpn/vpn_service/services/vpn_channel_contract.dart';
+/// Результат замера задержки
+class PingResult {
+  final int latency; // в мс, -1 если ошибка
+  final String? error;
+  final String target;
 
-import 'vpn_status.dart';
-import '../models/vpn_config.dart';
+  bool get isSuccess => latency >= 0;
 
-/// Ping helpers.
-///
-/// На Android используется нативный [LibXray.ping] через MethodChannel —
-/// он точнее TCP-сокета, потому что измеряет реальный RTT через Xray-стек.
-/// На iOS (и как fallback) — TCP handshake напрямую до сервера.
+  PingResult({required this.latency, required this.target, this.error});
+
+  @override
+  String toString() =>
+      isSuccess ? '$target: ${latency}ms' : '$target failed: $error';
+}
+
 class PingService {
-  PingService._();
+  // Константы для настроек по умолчанию
+  static const int _defaultTimeout = 3; // секунды
+  static const String _healthCheckHost = 'google.com';
 
-  static const _channel = VpnChannelContract.methodChannel;
-  static const _timeout = Duration(seconds: 5);
+  /// 1. Основной метод: Пинг до конкретного прокси-сервера (TCP Handshake)
+  /// Принимает [host] и [port]. Это самый быстрый способ проверить доступность ноды.
+  static Future<PingResult> tcpPing({
+    required String host,
+    required int port,
+    int timeoutSeconds = _defaultTimeout,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final socket = await Socket.connect(
+        host,
+        port,
+        timeout: Duration(seconds: timeoutSeconds),
+      );
 
-  // ── public API ─────────────────────────────────────────────────────────────
+      stopwatch.stop();
+      socket.destroy();
 
-  /// Пинг до сервера [config] в миллисекундах.
-  ///
-  /// Android: делегирует в LibXray.ping — встроенный RTT-замер.
-  /// iOS / desktop: TCP handshake через Socket.connect.
-  /// Возвращает [defaultPingValue] при таймауте или недоступности.
-  static Future<int> ping(String config) async {
-    if (Platform.isAndroid) {
-      return _nativeAndroidPing(config);
+      return PingResult(
+        latency: stopwatch.elapsedMilliseconds,
+        target: '$host:$port',
+      );
+    } catch (e) {
+      return PingResult(
+        latency: -1,
+        target: '$host:$port',
+        error: e.toString(),
+      );
     }
-
-    return -1;
   }
 
+  /// 2. Метод для проверки "качества интернета" через уже поднятое VPN соединение.
+  /// Делает полноценный HTTP запрос, чтобы убедиться, что трафик реально ходит.
+  static Future<int> pingConnected({
+    String host = _healthCheckHost,
+    int timeoutSeconds = _defaultTimeout,
+  }) async {
+    try {
+      final client = HttpClient()
+        ..connectionTimeout = Duration(seconds: timeoutSeconds);
+      final stopwatch = Stopwatch()..start();
 
-  // ── Android native ping via LibXray ───────────────────────────────────────
+      // Используем HEAD запрос - он максимально легкий
+      final request = await client.headUrl(Uri.parse('https://$host'));
+      final response = await request.close();
 
-  /// LibXray.ping принимает JSON вида:
-  /// {"url":"https://host:port","timeout":5000}
-  /// и возвращает RTT в мс или ошибку.
-  static Future<int> _nativeAndroidPing(String config) async {
-    throw UnimplementedError();
+      stopwatch.stop();
+
+      if (response.statusCode < 400) {
+        return stopwatch.elapsedMilliseconds;
+      }
+      return -1;
+    } catch (e) {
+      debugPrint('Health check failed: $e');
+      return -1;
+    }
+  }
+
+  /// 3. Парсинг конфига и пинг (Helper)
+  /// Если на вход прилетает ссылка или сложная строка, выдергиваем host:port и пингуем.
+  static Future<int> pingConfig(String config) async {
+    try {
+      // Очень упрощенный парсинг для примера.
+      // В идеале тут должен быть твой парсер VLESS/VMESS ссылок.
+      if (config.startsWith('vless://') || config.startsWith('vmess://')) {
+        final uri = Uri.parse(config.replaceFirst('vmess://', 'http://'));
+        return (await tcpPing(host: uri.host, port: uri.port)).latency;
+      }
+
+      // Если это JSON или что-то еще - логика парсинга тут
+      return -1;
+    } catch (_) {
+      return -1;
+    }
   }
 }

@@ -77,6 +77,7 @@ class XrayVpnService : VpnService() {
         super.onDestroy()
     }
 
+
     // ── connection ───────────────────────────────────────────────────────────
 
     private fun executeConnection(configData: String, isUrl: Boolean) {
@@ -105,10 +106,11 @@ class XrayVpnService : VpnService() {
             // 3. Создаём TUN интерфейс — после этого Android рисует VPN-иконку
             tunInterface = establishTunInterface()
                 ?: throw Exception("Failed to establish TUN interface")
-            Log.d(TAG, "TUN fd: ${tunInterface!!.fd}")
+            val fd = tunInterface!!.detachFd()
+            Log.d(TAG, "TUN fd: ${fd}")
 
             // 4. tun2socks читает IP-пакеты из TUN fd и проксирует через xray SOCKS
-            startTun2Socks(tunInterface!!.fd)
+            startTun2Socks(fd)
 
             isRunning = true
             broadcastStatus(STATUS_CONNECTED)
@@ -142,7 +144,7 @@ class XrayVpnService : VpnService() {
     private fun startTun2Socks(fd: Int) {
         // protect() нужен чтобы tun2socks→xray соединения
         // шли через физический интерфейс, а не обратно в TUN
-        protect(fd)
+//        protect(fd)
 
         val key = Key().apply {
             setDevice("fd://$fd")
@@ -318,15 +320,15 @@ class XrayVpnService : VpnService() {
     /** Останавливает xray и tun2socks, закрывает TUN fd. */
     private fun teardown() {
         if (isRunning) {
-            try { LibXray.stopXray() } catch (e: Exception) {
-                Log.w(TAG, "xray stop error: ${e.message}")
-            }
-            stopTun2Socks()
             isRunning = false
+            // 1. Сначала останавливаем tun2socks.
+            // engine.go сам вызовет Close() для дескриптора.
+            stopTun2Socks()
+
+            // 2. Останавливаем Xray
+            try { LibXray.stopXray() } catch (e: Exception) { }
         }
-        try { tunInterface?.close() } catch (e: Exception) {
-            Log.w(TAG, "tunInterface close error: ${e.message}")
-        }
+        // tunInterface.close() вызывать не нужно, если был сделан detachFd
         tunInterface = null
     }
 
