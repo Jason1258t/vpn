@@ -79,7 +79,7 @@ class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.S
             }
             "isActive" -> {
                 // Проверяем статический инстанс сервиса, который мы сохраняем в onCreate
-                val active = XrayVpnService.instance != null
+                val active = XrayVpnService.instance?.isServiceRunning == true
                 result.success(active)
             }
             else -> result.notImplemented()

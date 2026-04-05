@@ -51,6 +51,7 @@ class XrayVpnService : VpnService() {
     private var tunInterface: ParcelFileDescriptor? = null
     private var isRunning = false
 
+    val isServiceRunning get() = isRunning
     // ── lifecycle ────────────────────────────────────────────────────────────
 
     override fun onCreate() {
