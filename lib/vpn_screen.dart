@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:vpn/stopwatch.dart';
 import 'package:vpn/theme.dart';
 import 'package:vpn/data/theme_provider.dart';
 import 'package:vpn/vpn_power_button.dart';
@@ -27,8 +28,6 @@ class VpnScreen extends ConsumerWidget {
         return 'CONNECTING';
       case VpnStatus.error:
         return 'ERROR';
-      default:
-        return 'MEOW';
     }
   }
 
@@ -50,14 +49,12 @@ class VpnScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(appThemeProvider) == Brightness.dark;
 
-    final statusAsync = ref.watch(vpnStatusProvider);
-    final pingAsync = ref.watch(vpnControllerProvider);
+    final session = ref.watch(vpnControllerProvider);
 
-    final status = statusAsync.value ?? VpnStatus.disconnected;
-    final isConnected = status == VpnStatus.connected;
-    final isConnecting = status == VpnStatus.connecting;
+    final isConnected = session.status == VpnStatus.connected;
+    final isConnecting = session.status == VpnStatus.connecting;
 
-    final Color statusColor = mapStatusColor(status, isDark);
+    final Color statusColor = mapStatusColor(session.status, isDark);
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: const Text('ZXC VPN'),
@@ -76,7 +73,7 @@ class VpnScreen extends ConsumerWidget {
             children: [
               const SizedBox(height: 60),
               Text(
-                mapStatus(status),
+                mapStatus(session.status),
                 style: TextStyle(
                   letterSpacing: 4,
                   fontSize: 14,
@@ -92,8 +89,11 @@ class VpnScreen extends ConsumerWidget {
                   ref.read(vpnControllerProvider.notifier).toggleConnection();
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 24),
               if (isConnecting) ...[Text("Connecting, please wait...")],
+              if (isConnected && session.sessionStartTime != null) ...[
+                StopwatchWidget(start: session.sessionStartTime!),
+              ],
               const Spacer(),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -104,7 +104,7 @@ class VpnScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isDark
-                        ? VpnTheme.primary.withOpacity(0.3)
+                        ? VpnTheme.primary.withValues(alpha: 0.3)
                         : CupertinoColors.transparent,
                   ),
                 ),
@@ -117,12 +117,8 @@ class VpnScreen extends ConsumerWidget {
                   ),
                   title: const Text('🇸🇪 Sweden - Stockholm'),
                   trailing: Text(
-                    '${pingAsync.value ?? defaultPingValue} ms',
-                    style: TextStyle(
-                      color: mapPingToColor(
-                        pingAsync.value ?? defaultPingValue,
-                      ),
-                    ),
+                    '${session.ping} ms',
+                    style: TextStyle(color: mapPingToColor(session.ping)),
                   ),
                   onTap: () {},
                 ),

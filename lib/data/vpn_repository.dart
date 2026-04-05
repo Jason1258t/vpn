@@ -2,7 +2,15 @@ import 'dart:async';
 import 'dart:developer';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:vpn/data/cache_manager.dart';
 import 'package:vpn/vpn_service/vpn_service.dart';
+
+class VpnSession {
+  DateTime startTime;
+  DateTime? endTime;
+
+  VpnSession(this.startTime, {this.endTime});
+}
 
 class VpnRepository {
   final VpnService _vpn = VpnService.instance;
@@ -15,9 +23,19 @@ class VpnRepository {
 
   static final _baseConfigUrl = dotenv.get('BASE_URL');
 
-  Future<void> connect() => _vpn.connectBuUrl(_baseConfigUrl);
+  Future<void> connect() async {
+    await _vpn.connectBuUrl(_baseConfigUrl);
+  }
 
-  Future<void> disconnect() => _vpn.disconnect();
+  Future<void> disconnect() async {
+    await _vpn.disconnect();
+  }
+
+  Future<bool> isConnected() async {
+    final res = await _vpn.isServiceRunning();
+    if (res && status.value != VpnStatus.connected) status.add(VpnStatus.connected);
+    return res;
+  }
 
   Future<int> ping() async {
     try {
@@ -34,9 +52,7 @@ class VpnRepository {
 
   Future<int> _getPingConnected() => VpnService.pingConnected();
 
-  Future<int> _getPingToBaseServer() async {
-    return VpnService.ping(_baseConfigUrl);
-  }
+  Future<int> _getPingToBaseServer() => VpnService.ping(_baseConfigUrl);
 
   void dispose() {
     status.close();

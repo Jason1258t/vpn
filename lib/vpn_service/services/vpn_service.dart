@@ -2,25 +2,12 @@ import 'dart:async';
 import 'dart:developer';
 
 import 'package:rxdart/rxdart.dart';
-import 'package:vpn/vpn_service/models/vpn_config.dart';
-import 'package:vpn/vpn_service/services/test_config.dart';
 import 'package:vpn/vpn_service/services/vpn_status.dart';
 
 import 'ping_service.dart';
 import 'vpn_channel_contract.dart';
 
 /// Dart facade over the native VPN tunnel.
-///
-/// Usage:
-/// ```dart
-/// final vpn = VpnService.instance;
-/// vpn.status.listen((s) => print(s));
-///
-/// final config = VpnConfig.fromUrl('vless://...');
-/// await vpn.connect(config);
-/// ...
-/// await vpn.disconnect();
-/// ```
 class VpnService {
   VpnService._() {
     _listenToNativeEvents();
@@ -66,6 +53,14 @@ class VpnService {
     if (status.value == VpnStatus.disconnected) return;
     await VpnChannelContract.invokeDisconnect();
     _activeConfig = null;
+  }
+
+  Future<bool> isServiceRunning() async {
+    try {
+      return await VpnChannelContract.methodChannel.invokeMethod('isActive');
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── ping ───────────────────────────────────────────────────────────────────

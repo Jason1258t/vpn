@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'vpn_session.dart';
 import '../vpn_service/services/vpn_status.dart';
+import 'cache_manager.dart';
 import 'vpn_repository.dart';
 
 part 'vpn_provider.g.dart';
 
 @riverpod
 VpnRepository vpnRepository(Ref ref) {
-  return VpnRepository();
+  final VpnRepository repo = VpnRepository();
+
+  return repo;
 }
 
 @riverpod
@@ -19,33 +24,72 @@ Stream<VpnStatus> vpnStatus(Ref ref) {
 
 @riverpod
 class VpnController extends _$VpnController {
-  Timer? _timer;
+  Timer? _pingTimer;
 
   @override
-  FutureOr<int> build() {
-    updatePing();
+  VpnSessionStatus build() {
+    _initAsync();
+    return VpnSessionStatus();
+  }
+
+  _initAsync() async {
+    final repo = ref.read(vpnRepositoryProvider);
+
+    final ping = await repo.ping();
+    final VpnStatus status;
+    final cacheManager = ref.read(cacheManagerProvider);
+    DateTime? cachedSession = await cacheManager.getStartTime();
+
+    if (cachedSession != null) {
+      if (await repo.isConnected()) {
+        status = VpnStatus.connected;
+      } else {
+        status = VpnStatus.disconnected;
+        cachedSession = null;
+        cacheManager.clearStartTime();
+      }
+    } else {
+      status = VpnStatus.disconnected;
+    }
+
+    state = VpnSessionStatus(
+      ping: ping,
+      status: status,
+      sessionStartTime: cachedSession,
+    );
+
+    ref.read(vpnRepositoryProvider).status.stream.listen(_handleStatusChange);
     _initializePingChecker();
-    return defaultPingValue;
+  }
+
+  _handleStatusChange(VpnStatus s) async {
+    if (s == state.status) return;
+    final cacheManager = ref.read(cacheManagerProvider);
+    if (s == VpnStatus.connected) {
+      cacheManager.saveStartTime(DateTime.now());
+      state = state.copyWith(status: s, sessionStartTime: DateTime.now());
+    } else if (s == VpnStatus.disconnected) {
+      cacheManager.clearStartTime();
+      state = state.copyWith(status: s, sessionStartTime: null);
+    } else {
+      state = state.copyWith(status: s);
+    }
   }
 
   _initializePingChecker() {
-    _timer = Timer.periodic(Duration(seconds: 5), (t) => updatePing());
+    _pingTimer = Timer.periodic(Duration(seconds: 5), (t) => updatePing());
     ref.onDispose(() {
-      _timer?.cancel();
+      _pingTimer?.cancel();
     });
   }
 
   Future<void> toggleConnection() async {
     final repo = ref.read(vpnRepositoryProvider);
-    final status = ref.read(vpnStatusProvider).value;
-
-    status == VpnStatus.connected ? repo.disconnect() : repo.connect();
+    state.status == VpnStatus.disconnected ? repo.connect() : repo.disconnect();
   }
 
   Future<void> updatePing() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(vpnRepositoryProvider).ping(),
-    );
+    final ping = await ref.read(vpnRepositoryProvider).ping();
+    state = state.copyWith(ping: ping);
   }
 }

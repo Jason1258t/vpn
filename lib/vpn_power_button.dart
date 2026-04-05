@@ -16,7 +16,7 @@ class VpnPowerButton extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: VpnTheme.primary.withOpacity(0.2),
+            color: VpnTheme.primary.withValues(alpha: 0.2),
             blurRadius: 40,
             spreadRadius: 5,
           ),
