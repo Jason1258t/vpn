@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:developer';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:vpn/data/cache_manager.dart';
 import 'package:vpn/vpn_service/vpn_service.dart';
 
 class VpnSession {
@@ -12,24 +10,26 @@ class VpnSession {
   VpnSession(this.startTime, {this.endTime});
 }
 
-abstract class Configs {
-  static final vlessRealityConfigUrl = dotenv.get('VLESS_REALITY_LINK');
-  static final vlessXHttpTLSConfigUrl = dotenv.get('VLESS_XHTTP_TLS_LINK');
-  static final vlessXHttpConfigUrl = dotenv.get('VLESS_XHTTP_LINK');
-}
-
 class VpnRepository {
   final VpnService _vpn = VpnService.instance;
 
-  BehaviorSubject<VpnStatus> get status => _vpn.status
-    ..stream.listen((s) {
+  late final BehaviorSubject<VpnStatus> _statusController;
+
+  VpnRepository() {
+    _statusController = _vpn.status;
+    _statusController.stream.listen((s) {
       _currentStatus = s;
     });
+  }
+
+  BehaviorSubject<VpnStatus> get status => _statusController;
+
   VpnStatus _currentStatus = VpnStatus.disconnected;
 
   String? _currentConfigUrl;
 
   void setConfigUrl(String url) {
+    log("set config: $url");
     _currentConfigUrl = url;
   }
 

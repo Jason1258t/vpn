@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:vpn/data/protocol_manager.dart';
 import 'vpn_session.dart';
@@ -9,16 +8,15 @@ import 'vpn_repository.dart';
 
 part 'vpn_provider.g.dart';
 
-@riverpod
-VpnRepository vpnRepository(Ref ref) {
-  final VpnRepository repo = VpnRepository();
 
-  return repo;
+@Riverpod(keepAlive: true)
+VpnRepository vpnRepository(Ref ref) {
+  return VpnRepository();
 }
 
 @riverpod
 Stream<VpnStatus> vpnStatus(Ref ref) {
-  final repo = ref.watch(vpnRepositoryProvider);
+  final repo = ref.read(vpnRepositoryProvider);
   return repo.status.stream;
 }
 
@@ -94,9 +92,9 @@ class VpnController extends _$VpnController {
   }
 
   Future<void> toggleProtocol() async {
-    final repo = ref.watch(vpnRepositoryProvider);
+    final repo = ref.read(vpnRepositoryProvider);
     if (state.status != VpnStatus.disconnected) await repo.disconnect();
-    final protocolManager = ref.watch(protocolManagerProvider);
+    final protocolManager = ref.read(protocolManagerProvider);
     final protocol = await protocolManager.getProtocol();
 
     final newProtocol = protocol == AvailableProtocols.vlessReality
@@ -104,8 +102,7 @@ class VpnController extends _$VpnController {
         : AvailableProtocols.vlessReality;
 
     await protocolManager.setProtocol(newProtocol);
-    final newConnection = await protocolManager.currentConnectUrl;
-    repo.setConfigUrl(newConnection);
+    repo.setConfigUrl(await protocolManager.currentConnectUrl);
 
     state = state.copyWith(
       protocol: newProtocol,

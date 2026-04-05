@@ -3,6 +3,7 @@ import 'dart:developer';
 
 import 'package:rxdart/rxdart.dart';
 import 'package:vpn/vpn_service/services/vpn_status.dart';
+import 'package:vpn/vpn_service/services/xray_parser.dart';
 
 import 'ping_service.dart';
 import 'vpn_channel_contract.dart';
@@ -38,7 +39,9 @@ class VpnService {
     status.add(VpnStatus.connecting);
 
     try {
-      await VpnChannelContract.invokeConnect(url);
+      final config = XrayConfigService.vlessToXrayJson(url);
+      if (config == null) throw Exception("Can't parse config");
+      await VpnChannelContract.invokeConnect(config);
       _activeConfig = url;
     } catch (e, st) {
       _activeConfig = null;

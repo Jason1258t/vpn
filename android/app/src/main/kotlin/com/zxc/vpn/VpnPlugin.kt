@@ -16,24 +16,19 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import android.os.Build
 
-
 class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ActivityAware, PluginRegistry.ActivityResultListener {
 
     private var context: Context? = null
     private var activity: Activity? = null
     private var eventSink: EventChannel.EventSink? = null
-
     private var pendingConfigData: String? = null
-    private var pendingIsUrl: Boolean = false
 
     private val VPN_REQUEST_CODE = 2026
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             val status = intent?.getStringExtra(XrayVpnService.EXTRA_STATUS)
-            if (status != null) {
-                eventSink?.success(status)
-            }
+            status?.let { eventSink?.success(it) }
         }
     }
 
@@ -43,9 +38,64 @@ class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.S
         EventChannel(binding.binaryMessenger, "com.zxc.vpn/vpn_status").setStreamHandler(this)
 
         LocalBroadcastManager.getInstance(context!!).registerReceiver(
-            statusReceiver,
-            IntentFilter(XrayVpnService.BROADCAST_STATUS)
+            statusReceiver, IntentFilter(XrayVpnService.BROADCAST_STATUS)
         )
+    }
+
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "connect" -> {
+                checkNotificationPermission()
+                val config = call.argument<String>("config")
+                if (config.isNullOrEmpty()) {
+                    result.error("INVALID_ARGUMENT", "Config is empty", null)
+                    return
+                }
+                initiateConnection(config, result)
+            }
+            "disconnect" -> {
+                context?.startService(Intent(context, XrayVpnService::class.java).apply {
+                    action = XrayVpnService.ACTION_DISCONNECT
+                })
+                result.success(true)
+            }
+            "isActive" -> {
+                result.success(XrayVpnService.instance?.isServiceRunning == true)
+            }
+            else -> result.notImplemented()
+        }
+    }
+
+    private fun initiateConnection(config: String, result: MethodChannel.Result) {
+        val vpnIntent = VpnService.prepare(context)
+        if (vpnIntent != null) {
+            pendingConfigData = config
+            activity?.startActivityForResult(vpnIntent, VPN_REQUEST_CODE)
+        } else {
+            startVpnService(config)
+        }
+        result.success(true)
+    }
+
+    private fun startVpnService(config: String) {
+        val intent = Intent(context, XrayVpnService::class.java).apply {
+            action = XrayVpnService.ACTION_CONNECT
+            putExtra(XrayVpnService.EXTRA_CONFIG, config)
+        }
+        context?.startService(intent)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == VPN_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK) {
+                pendingConfigData?.let { startVpnService(it) }
+            } else {
+                eventSink?.success(XrayVpnService.STATUS_ERROR)
+            }
+            pendingConfigData = null
+            return true
+        }
+        return false
     }
 
     private fun checkNotificationPermission() {
@@ -57,100 +107,17 @@ class VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.S
         }
     }
 
-    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "connect" -> {
-                checkNotificationPermission()
-                val config = call.argument<String>("config")
-                if (config.isNullOrEmpty()) {
-                    result.error("INVALID_ARGUMENT", "Конфигурация не может быть пустой", null)
-                    return
-                }
-
-                val isUrl = config.startsWith("vless://") || config.startsWith("vmess://") || config.startsWith("ss://")
-                initiateConnection(config, isUrl, result)
-            }
-            "disconnect" -> {
-                val intent = Intent(context, XrayVpnService::class.java).apply {
-                    action = XrayVpnService.ACTION_DISCONNECT
-                }
-                context?.startService(intent)
-                result.success(true)
-            }
-            "isActive" -> {
-                // Проверяем статический инстанс сервиса, который мы сохраняем в onCreate
-                val active = XrayVpnService.instance?.isServiceRunning == true
-                result.success(active)
-            }
-            else -> result.notImplemented()
-        }
-    }
-
-    private fun initiateConnection(config: String, isUrl: Boolean, result: MethodChannel.Result) {
-        val vpnIntent = VpnService.prepare(context)
-        if (vpnIntent != null) {
-            pendingConfigData = config
-            pendingIsUrl = isUrl
-            activity?.startActivityForResult(vpnIntent, VPN_REQUEST_CODE)
-        } else {
-            startVpnService(config, isUrl)
-        }
-        result.success(true)
-    }
-
-    private fun startVpnService(config: String, isUrl: Boolean) {
-        val intent = Intent(context, XrayVpnService::class.java).apply {
-            action = XrayVpnService.ACTION_CONNECT
-            putExtra(XrayVpnService.EXTRA_CONFIG, config)
-            putExtra(XrayVpnService.EXTRA_IS_URL, isUrl)
-        }
-        context?.startService(intent)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
-        if (requestCode == VPN_REQUEST_CODE) {
-            if (resultCode == Activity.RESULT_OK) {
-                pendingConfigData?.let { config ->
-                    startVpnService(config, pendingIsUrl)
-                }
-            } else {
-                eventSink?.success(XrayVpnService.STATUS_ERROR)
-            }
-            pendingConfigData = null
-            return true
-        }
-        return false
-    }
-
-    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-        eventSink = events
-    }
-
-    override fun onCancel(arguments: Any?) {
-        eventSink = null
-    }
-
+    override fun onListen(args: Any?, events: EventChannel.EventSink?) { eventSink = events }
+    override fun onCancel(args: Any?) { eventSink = null }
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
         binding.addActivityResultListener(this)
     }
-
-    override fun onDetachedFromActivity() {
-        activity = null
-    }
-
+    override fun onDetachedFromActivity() { activity = null }
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        context?.let {
-            LocalBroadcastManager.getInstance(it).unregisterReceiver(statusReceiver)
-        }
+        context?.let { LocalBroadcastManager.getInstance(it).unregisterReceiver(statusReceiver) }
         context = null
     }
-
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
-        onAttachedToActivity(binding)
-    }
-
-    override fun onDetachedFromActivityForConfigChanges() {
-        onDetachedFromActivity()
-    }
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) = onAttachedToActivity(binding)
+    override fun onDetachedFromActivityForConfigChanges() = onDetachedFromActivity()
 }
