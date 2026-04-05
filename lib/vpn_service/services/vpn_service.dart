@@ -85,7 +85,7 @@ class VpnService {
   /// Returns [defaultPingValue] if not connected or on error.
   static Future<int> pingConnected() async {
     try {
-      final res = await PingService.pingConnected();
+      final res = await PingService.pingHost();
       return res;
     } catch (e) {
       log(e.toString());

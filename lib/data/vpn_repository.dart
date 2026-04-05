@@ -12,6 +12,12 @@ class VpnSession {
   VpnSession(this.startTime, {this.endTime});
 }
 
+abstract class Configs {
+  static final vlessRealityConfigUrl = dotenv.get('VLESS_REALITY_LINK');
+  static final vlessXHttpTLSConfigUrl = dotenv.get('VLESS_XHTTP_TLS_LINK');
+  static final vlessXHttpConfigUrl = dotenv.get('VLESS_XHTTP_LINK');
+}
+
 class VpnRepository {
   final VpnService _vpn = VpnService.instance;
 
@@ -21,10 +27,14 @@ class VpnRepository {
     });
   VpnStatus _currentStatus = VpnStatus.disconnected;
 
-  static final _baseConfigUrl = dotenv.get('BASE_URL');
+  String? _currentConfigUrl;
+
+  void setConfigUrl(String url) {
+    _currentConfigUrl = url;
+  }
 
   Future<void> connect() async {
-    await _vpn.connectBuUrl(_baseConfigUrl);
+    await _vpn.connectBuUrl(_currentConfigUrl!);
   }
 
   Future<void> disconnect() async {
@@ -33,7 +43,9 @@ class VpnRepository {
 
   Future<bool> isConnected() async {
     final res = await _vpn.isServiceRunning();
-    if (res && status.value != VpnStatus.connected) status.add(VpnStatus.connected);
+    if (res && status.value != VpnStatus.connected) {
+      status.add(VpnStatus.connected);
+    }
     return res;
   }
 
@@ -52,7 +64,13 @@ class VpnRepository {
 
   Future<int> _getPingConnected() => VpnService.pingConnected();
 
-  Future<int> _getPingToBaseServer() => VpnService.ping(_baseConfigUrl);
+  Future<int> _getPingToBaseServer() async {
+    if (_currentConfigUrl == null) {
+      log("Can't ping empty host");
+      return -1;
+    }
+    return await VpnService.ping(_currentConfigUrl!);
+  }
 
   void dispose() {
     status.close();

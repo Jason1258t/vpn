@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
-
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:vpn/data/protocol_manager.dart';
 import 'vpn_session.dart';
 import '../vpn_service/services/vpn_status.dart';
 import 'cache_manager.dart';
@@ -29,11 +29,15 @@ class VpnController extends _$VpnController {
   @override
   VpnSessionStatus build() {
     _initAsync();
-    return VpnSessionStatus();
+    return VpnSessionStatus(protocol: ProtocolManager.defaultProtocol);
   }
 
   _initAsync() async {
     final repo = ref.read(vpnRepositoryProvider);
+    final protocolManager = ref.read(protocolManagerProvider);
+
+    final protocol = await protocolManager.getProtocol();
+    repo.setConfigUrl(await protocolManager.currentConnectUrl);
 
     final ping = await repo.ping();
     final VpnStatus status;
@@ -56,6 +60,7 @@ class VpnController extends _$VpnController {
       ping: ping,
       status: status,
       sessionStartTime: cachedSession,
+      protocol: protocol,
     );
 
     ref.read(vpnRepositoryProvider).status.stream.listen(_handleStatusChange);
@@ -86,6 +91,26 @@ class VpnController extends _$VpnController {
   Future<void> toggleConnection() async {
     final repo = ref.read(vpnRepositoryProvider);
     state.status == VpnStatus.disconnected ? repo.connect() : repo.disconnect();
+  }
+
+  Future<void> toggleProtocol() async {
+    final repo = ref.watch(vpnRepositoryProvider);
+    if (state.status != VpnStatus.disconnected) await repo.disconnect();
+    final protocolManager = ref.watch(protocolManagerProvider);
+    final protocol = await protocolManager.getProtocol();
+
+    final newProtocol = protocol == AvailableProtocols.vlessReality
+        ? AvailableProtocols.vlessXHttpTLS
+        : AvailableProtocols.vlessReality;
+
+    await protocolManager.setProtocol(newProtocol);
+    final newConnection = await protocolManager.currentConnectUrl;
+    repo.setConfigUrl(newConnection);
+
+    state = state.copyWith(
+      protocol: newProtocol,
+      status: VpnStatus.disconnected,
+    );
   }
 
   Future<void> updatePing() async {

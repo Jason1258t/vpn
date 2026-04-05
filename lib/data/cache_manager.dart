@@ -12,6 +12,7 @@ VpnCacheManager cacheManager(Ref ref) {
 class VpnCacheManager {
   final SharedPreferencesAsync _prefs;
   static const _keyStartTime = 'vpn_start_time';
+  static const _keyProtocol = 'vpn_selected_protocol';
 
   VpnCacheManager(this._prefs);
 
@@ -26,5 +27,14 @@ class VpnCacheManager {
   Future<DateTime?> getStartTime() async {
     final ms = await _prefs.getInt(_keyStartTime);
     return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+  }
+
+  Future<void> setProtocol(String protocol) async {
+    await _prefs.setString(_keyProtocol, protocol);
+  }
+
+  Future<String?> getProtocol() async {
+    final cachedProtocol = await _prefs.getString(_keyProtocol);
+    return cachedProtocol;
   }
 }

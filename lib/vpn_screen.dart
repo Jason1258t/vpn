@@ -7,6 +7,7 @@ import 'package:vpn/data/theme_provider.dart';
 import 'package:vpn/vpn_power_button.dart';
 import 'package:vpn/data/vpn_provider.dart';
 
+import 'data/protocol_manager.dart';
 import 'vpn_service/services/vpn_status.dart';
 
 class VpnScreen extends ConsumerWidget {
@@ -123,6 +124,12 @@ class VpnScreen extends ConsumerWidget {
                   onTap: () {},
                 ),
               ),
+              const SizedBox(height: 24),
+              ProtocolSwitch(
+                protocol: session.protocol,
+                toggle: () =>
+                    ref.read(vpnControllerProvider.notifier).toggleProtocol(),
+              ),
               const SizedBox(height: 40),
             ],
           ),
@@ -146,6 +153,89 @@ class VpnScreen extends ConsumerWidget {
           CupertinoDialogAction(
             child: Text("Ок", style: TextStyle(color: Colors.white)),
             onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ProtocolSwitch extends StatelessWidget {
+  const ProtocolSwitch({
+    super.key,
+    required this.protocol,
+    required this.toggle,
+  });
+
+  final String protocol;
+  final VoidCallback toggle;
+
+  static const double _width = 200;
+  static const double _height = 50;
+
+  static final double _childWidth = _width / 2 - 8;
+  static final double _childHeight = _height - 8;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: _width,
+      height: _height,
+      padding: EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: VpnTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: VpnTheme.primary.withValues(alpha: 0.3)),
+      ),
+      child: Stack(
+        children: [
+          AnimatedPositioned(
+            duration: Duration(milliseconds: 300),
+            top: 0,
+            left: protocol == AvailableProtocols.vlessReality ? 0 : _childWidth,
+            curve: Curves.easeInOut,
+            child: Container(
+              width: _childWidth,
+              height: _childHeight,
+              decoration: BoxDecoration(
+                color: VpnTheme.primary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                width: _childWidth,
+                alignment: Alignment.center,
+                child: TextButton(
+                  onPressed: toggle,
+                  child: Text(
+                    "Reality",
+                    style: TextStyle(
+                      color: protocol == AvailableProtocols.vlessReality
+                          ? Colors.white
+                          : VpnTheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: _childWidth,
+                alignment: Alignment.center,
+                child: TextButton(
+                  onPressed: toggle,
+                  child: Text(
+                    "XHttp",
+                    style: TextStyle(
+                      color: protocol == AvailableProtocols.vlessXHttpTLS
+                          ? Colors.white
+                          : VpnTheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

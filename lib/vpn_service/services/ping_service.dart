@@ -20,7 +20,7 @@ class PingResult {
 class PingService {
   // Константы для настроек по умолчанию
   static const int _defaultTimeout = 3; // секунды
-  static const String _healthCheckHost = 'google.com';
+  static const String _pingHost = 'google.com';
 
   /// 1. Основной метод: Пинг до конкретного прокси-сервера (TCP Handshake)
   /// Принимает [host] и [port]. Это самый быстрый способ проверить доступность ноды.
@@ -55,8 +55,8 @@ class PingService {
 
   /// 2. Метод для проверки "качества интернета" через уже поднятое VPN соединение.
   /// Делает полноценный HTTP запрос, чтобы убедиться, что трафик реально ходит.
-  static Future<int> pingConnected({
-    String host = _healthCheckHost,
+  static Future<int> pingHost({
+    String host = _pingHost,
     int timeoutSeconds = _defaultTimeout,
   }) async {
     try {
