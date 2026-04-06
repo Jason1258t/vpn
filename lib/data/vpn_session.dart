@@ -1,4 +1,4 @@
-import '../vpn_service/services/vpn_status.dart';
+import '../vpn_service/vpn_status.dart';
 
 class VpnSession {
   DateTime startTime;

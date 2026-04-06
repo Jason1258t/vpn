@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:developer';
 
 import 'package:rxdart/rxdart.dart';
-import 'package:vpn/vpn_service/services/vpn_status.dart';
+import 'package:vpn/vpn_service/vpn_status.dart';
 import 'package:vpn/vpn_service/services/xray_parser.dart';
 
 import 'ping_service.dart';

@@ -72,7 +72,7 @@ class ProtocolSwitch extends StatelessWidget {
                   child: Text(
                     "XHttp",
                     style: TextStyle(
-                      color: protocol == AvailableProtocols.vlessXHttp
+                      color: protocol == AvailableProtocols.vlessXHttpTLS
                           ? Colors.white
                           : VpnTheme.primary,
                     ),

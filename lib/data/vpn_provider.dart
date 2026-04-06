@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:vpn/data/protocol_manager.dart';
 import 'vpn_session.dart';
-import '../vpn_service/services/vpn_status.dart';
+import '../vpn_service/vpn_status.dart';
 import 'cache_manager.dart';
 import 'vpn_repository.dart';
 
@@ -86,7 +86,7 @@ class VpnController extends _$VpnController {
     final protocol = await _protocolManager.getProtocol();
 
     final newProtocol = protocol == AvailableProtocols.vlessReality
-        ? AvailableProtocols.vlessXHttp
+        ? AvailableProtocols.vlessXHttpTLS
         : AvailableProtocols.vlessReality;
 
     await _protocolManager.setProtocol(newProtocol);

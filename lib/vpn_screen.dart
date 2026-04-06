@@ -8,16 +8,11 @@ import 'package:vpn/data/theme_provider.dart';
 import 'package:vpn/widgets/vpn_power_button.dart';
 import 'package:vpn/data/vpn_provider.dart';
 
-import 'vpn_service/services/vpn_status.dart';
+import 'vpn_service/vpn_status.dart';
+import 'widgets/server_info.dart';
 
 class VpnScreen extends ConsumerWidget {
   const VpnScreen({super.key});
-
-  Color mapPingToColor(int ping) {
-    if (ping < 100) return Colors.green;
-    if (ping < 200) return Colors.yellow;
-    return Colors.red;
-  }
 
   String mapStatus(VpnStatus status) {
     switch (status) {
@@ -36,9 +31,9 @@ class VpnScreen extends ConsumerWidget {
     Color statusColor;
 
     if (status == VpnStatus.error) {
-      statusColor = Colors.red;
+      statusColor = VpnTheme.statusBad;
     } else if (status == VpnStatus.connected) {
-      statusColor = Colors.green;
+      statusColor = VpnTheme.statusNice;
     } else {
       statusColor = isDark ? CupertinoColors.systemGrey : CupertinoColors.black;
     }
@@ -96,33 +91,10 @@ class VpnScreen extends ConsumerWidget {
                 StopwatchWidget(start: session.sessionStartTime!),
               ],
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? VpnTheme.surfaceDark
-                      : CupertinoColors.systemGrey6,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark
-                        ? VpnTheme.primary.withValues(alpha: 0.3)
-                        : CupertinoColors.transparent,
-                  ),
-                ),
-                child: CupertinoListTile(
-                  padding: EdgeInsets.symmetric(vertical: 0, horizontal: 4),
-                  leadingToTitle: 12,
-                  leading: const Icon(
-                    CupertinoIcons.globe,
-                    color: VpnTheme.primary,
-                  ),
-                  title: const Text('🇸🇪 Sweden - Stockholm'),
-                  trailing: Text(
-                    '${session.ping} ms',
-                    style: TextStyle(color: mapPingToColor(session.ping)),
-                  ),
-                  onTap: () {},
-                ),
+              ServerInfo(
+                ping: session.ping,
+                flag: '🇸🇪',
+                name: 'Sweden - Stockholm',
               ),
               const SizedBox(height: 24),
               ProtocolSwitch(
