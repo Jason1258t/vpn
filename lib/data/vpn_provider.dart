@@ -8,42 +8,33 @@ import 'vpn_repository.dart';
 
 part 'vpn_provider.g.dart';
 
-
-@Riverpod(keepAlive: true)
-VpnRepository vpnRepository(Ref ref) {
-  return VpnRepository();
-}
-
-@riverpod
-Stream<VpnStatus> vpnStatus(Ref ref) {
-  final repo = ref.read(vpnRepositoryProvider);
-  return repo.status.stream;
-}
-
 @riverpod
 class VpnController extends _$VpnController {
   Timer? _pingTimer;
 
+  late final VpnRepository _repo;
+  late final ProtocolManager _protocolManager;
+
   @override
   VpnSessionStatus build() {
+    _repo = ref.watch(vpnRepositoryProvider);
+    _protocolManager = ref.watch(protocolManagerProvider);
+
     _initAsync();
     return VpnSessionStatus(protocol: ProtocolManager.defaultProtocol);
   }
 
   _initAsync() async {
-    final repo = ref.read(vpnRepositoryProvider);
-    final protocolManager = ref.read(protocolManagerProvider);
+    final protocol = await _protocolManager.getProtocol();
+    _repo.setConfigUrl(await _protocolManager.currentConnectUrl);
 
-    final protocol = await protocolManager.getProtocol();
-    repo.setConfigUrl(await protocolManager.currentConnectUrl);
-
-    final ping = await repo.ping();
+    final ping = await _repo.ping();
     final VpnStatus status;
     final cacheManager = ref.read(cacheManagerProvider);
     DateTime? cachedSession = await cacheManager.getStartTime();
 
     if (cachedSession != null) {
-      if (await repo.isConnected()) {
+      if (await _repo.isConnected()) {
         status = VpnStatus.connected;
       } else {
         status = VpnStatus.disconnected;
@@ -61,7 +52,7 @@ class VpnController extends _$VpnController {
       protocol: protocol,
     );
 
-    ref.read(vpnRepositoryProvider).status.stream.listen(_handleStatusChange);
+    _repo.status.stream.listen(_handleStatusChange);
     _initializePingChecker();
   }
 
@@ -87,22 +78,19 @@ class VpnController extends _$VpnController {
   }
 
   Future<void> toggleConnection() async {
-    final repo = ref.read(vpnRepositoryProvider);
-    state.status == VpnStatus.disconnected ? repo.connect() : repo.disconnect();
+    state.status == VpnStatus.disconnected ? _repo.connect() : _repo.disconnect();
   }
 
   Future<void> toggleProtocol() async {
-    final repo = ref.read(vpnRepositoryProvider);
-    if (state.status != VpnStatus.disconnected) await repo.disconnect();
-    final protocolManager = ref.read(protocolManagerProvider);
-    final protocol = await protocolManager.getProtocol();
+    if (state.status != VpnStatus.disconnected) await _repo.disconnect();
+    final protocol = await _protocolManager.getProtocol();
 
     final newProtocol = protocol == AvailableProtocols.vlessReality
-        ? AvailableProtocols.vlessXHttpTLS
+        ? AvailableProtocols.vlessXHttp
         : AvailableProtocols.vlessReality;
 
-    await protocolManager.setProtocol(newProtocol);
-    repo.setConfigUrl(await protocolManager.currentConnectUrl);
+    await _protocolManager.setProtocol(newProtocol);
+    _repo.setConfigUrl(await _protocolManager.currentConnectUrl);
 
     state = state.copyWith(
       protocol: newProtocol,
@@ -111,7 +99,7 @@ class VpnController extends _$VpnController {
   }
 
   Future<void> updatePing() async {
-    final ping = await ref.read(vpnRepositoryProvider).ping();
+    final ping = await _repo.ping();
     state = state.copyWith(ping: ping);
   }
 }

@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:developer';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:vpn/vpn_service/vpn_service.dart';
 
-class VpnSession {
-  DateTime startTime;
-  DateTime? endTime;
+part 'vpn_repository.g.dart';
 
-  VpnSession(this.startTime, {this.endTime});
+@riverpod
+VpnRepository vpnRepository(Ref ref) {
+  return VpnRepository();
 }
 
 class VpnRepository {
@@ -29,7 +30,6 @@ class VpnRepository {
   String? _currentConfigUrl;
 
   void setConfigUrl(String url) {
-    log("set config: $url");
     _currentConfigUrl = url;
   }
 
@@ -65,10 +65,7 @@ class VpnRepository {
   Future<int> _getPingConnected() => VpnService.pingConnected();
 
   Future<int> _getPingToBaseServer() async {
-    if (_currentConfigUrl == null) {
-      log("Can't ping empty host");
-      return -1;
-    }
+    if (_currentConfigUrl == null) return -1;
     return await VpnService.ping(_currentConfigUrl!);
   }
 

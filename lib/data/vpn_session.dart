@@ -1,5 +1,12 @@
 import '../vpn_service/services/vpn_status.dart';
 
+class VpnSession {
+  DateTime startTime;
+  DateTime? endTime;
+
+  VpnSession(this.startTime, {this.endTime});
+}
+
 class VpnSessionStatus {
   final int ping;
   final VpnStatus status;
@@ -21,11 +28,11 @@ class VpnSessionStatus {
     VpnStatus? status,
     int? ping,
     DateTime? sessionStartTime,
-    String? protocol
+    String? protocol,
   }) => VpnSessionStatus(
     status: status ?? this.status,
     ping: ping ?? this.ping,
     sessionStartTime: sessionStartTime ?? this.sessionStartTime,
-    protocol: protocol ?? this.protocol
+    protocol: protocol ?? this.protocol,
   );
 }
