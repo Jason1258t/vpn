@@ -3,7 +3,10 @@ import 'dart:convert';
 class XrayConfigService {
   static const int socksPort = 10808;
 
-  static String? vlessToXrayJson(String url) {
+  static String? vlessToXrayJson(
+    String url, {
+    bool enableSplitTunneling = true,
+  }) {
     try {
       final uri = Uri.parse(url);
       if (uri.scheme != 'vless') return null;
@@ -35,11 +38,12 @@ class XrayConfigService {
           "serverName": params['sni'] ?? "",
           "publicKey": params['pbk'] ?? "",
           "shortId": params['sid'] ?? "",
-          "spiderX": "/"
+          "spiderX": "/",
         };
       } else if (security == 'tls') {
         final allowInsecureStr = params['allowInsecure']?.toLowerCase();
-        final bool allowInsecure = allowInsecureStr == 'true' || allowInsecureStr == '1';
+        final bool allowInsecure =
+            allowInsecureStr == 'true' || allowInsecureStr == '1';
 
         streamSettings['tlsSettings'] = {
           "serverName": params['sni'] ?? "",
@@ -48,13 +52,39 @@ class XrayConfigService {
         };
       }
 
+      final rules = [];
+
+      if (enableSplitTunneling) {
+        // Правило для российских доменов (geosite + регулярки)
+        rules.add({
+          "domain": [
+            "geosite:category-ru",
+            r"regexp:.*\.ru$",
+            r"regexp:.*\.рф$",
+            r"regexp:.*\.su$",
+            r"regexp:.*\.moscow$",
+            r"regexp:.*\.msk\.ru$",
+            r"regexp:.*\.spb\.ru$",
+            r"regexp:.*\.tatar$",
+            r"regexp:.*\.дети$",
+            r"regexp:.*\.католик$",
+            r"regexp:.*\.онлайн$",
+            r"regexp:.*\.сайт$",
+          ],
+          "outboundTag": "direct",
+        });
+
+        // Правило для российских IP-адресов
+        rules.add({
+          "ip": ["geoip:ru"],
+          "outboundTag": "direct",
+        });
+      }
+
       // 2. Сборка полного конфига
       final config = {
         "log": {"loglevel": "warning"},
-        "routing": {
-          "domainStrategy": "IPIfNonMatch",
-          "rules": []
-        },
+        "routing": {"domainStrategy": "IPIfNonMatch", "rules": rules},
         "outbounds": [
           {
             "protocol": "vless",
@@ -71,16 +101,16 @@ class XrayConfigService {
                           ? (params['flow'] ?? "xtls-rprx-vision")
                           : "", // Flow нужен только для Reality + TCP
                       "encryption": "none",
-                    }
-                  ]
-                }
-              ]
+                    },
+                  ],
+                },
+              ],
             },
-            "streamSettings": streamSettings
+            "streamSettings": streamSettings,
           },
           {"tag": "direct", "protocol": "freedom"},
-          {"tag": "block", "protocol": "blackhole"}
-        ]
+          {"tag": "block", "protocol": "blackhole"},
+        ],
       };
 
       return jsonEncode(config);
