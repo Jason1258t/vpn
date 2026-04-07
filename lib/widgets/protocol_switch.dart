@@ -1,40 +1,65 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:vpn/data/protocol_manager.dart';
 import 'package:vpn/theme.dart';
 
 class ProtocolSwitch extends StatelessWidget {
-  const ProtocolSwitch({
+  ProtocolSwitch({
     super.key,
-    required this.protocol,
+    required this.currentProtocol,
     required this.toggle,
-  });
+    required this.protocols,
+    this.width = 200,
+    this.height = 50,
+  }) {
+    _prepareSizes();
+  }
 
-  final String protocol;
+  final String currentProtocol;
   final VoidCallback toggle;
 
-  static const double _width = 200;
-  static const double _height = 50;
+  final List<ProtocolViewData> protocols;
 
-  static final double _childWidth = _width / 2 - 4 - 1;
-  static final double _childHeight = _height - 10;
+  final double width;
+  final double height;
+
+  late final double _childWidth;
+  late final double _childHeight;
+
+  static final double _padding = 4;
+  static final double _borderWidth = 1;
+
+  void _prepareSizes() {
+    _childWidth = (width - _padding * 2 - _borderWidth * 2) / protocols.length;
+    _childHeight = height - _padding * 2 - _borderWidth * 2;
+  }
 
   @override
   Widget build(BuildContext context) {
+    log(protocols.toString());
+    log(currentProtocol);
+
     return Container(
-      width: _width,
-      height: _height,
-      padding: EdgeInsets.all(4),
+      width: width,
+      height: height,
+      padding: EdgeInsets.all(_padding),
       decoration: BoxDecoration(
         color: VpnTheme.surfaceDark,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: VpnTheme.primary.withValues(alpha: 0.3), width: 1),
+        border: Border.all(
+          color: VpnTheme.primary.withValues(alpha: 0.3),
+          width: _borderWidth,
+        ),
       ),
       child: Stack(
         children: [
           AnimatedPositioned(
             duration: Duration(milliseconds: 300),
             top: 0,
-            left: protocol == AvailableProtocols.vlessReality ? 0 : _childWidth,
+            left:
+                _childWidth *
+                protocols.indexWhere((p) => p.id == currentProtocol),
             curve: Curves.easeInOut,
             child: Container(
               width: _childWidth,
@@ -47,38 +72,24 @@ class ProtocolSwitch extends StatelessWidget {
           ),
           Row(
             children: [
-              Container(
-                width: _childWidth,
-                height: _childHeight,
-                alignment: Alignment.center,
-                child: GestureDetector(
-                  onTap: toggle,
-                  child: Text(
-                    "Reality",
-                    style: TextStyle(
-                      color: protocol == AvailableProtocols.vlessReality
-                          ? Colors.white
-                          : VpnTheme.primary,
+              for (ProtocolViewData p in protocols) ...[
+                Container(
+                  width: _childWidth,
+                  height: _childHeight,
+                  alignment: Alignment.center,
+                  child: GestureDetector(
+                    onTap: toggle,
+                    child: Text(
+                      p.name,
+                      style: TextStyle(
+                        color: currentProtocol == p.id
+                            ? Colors.white
+                            : VpnTheme.primary,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Container(
-                width: _childWidth,
-                height: _childHeight,
-                alignment: Alignment.center,
-                child: GestureDetector(
-                  onTap: toggle,
-                  child: Text(
-                    "XHttp",
-                    style: TextStyle(
-                      color: protocol == AvailableProtocols.vlessXHttpTLS
-                          ? Colors.white
-                          : VpnTheme.primary,
-                    ),
-                  ),
-                ),
-              ),
+              ],
             ],
           ),
         ],

@@ -98,7 +98,8 @@ class VpnScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
               ProtocolSwitch(
-                protocol: session.protocol,
+                currentProtocol: session.protocol,
+                protocols: VpnController.protocols,
                 toggle: () =>
                     ref.read(vpnControllerProvider.notifier).toggleProtocol(),
               ),

@@ -4,6 +4,19 @@ import 'package:vpn/data/cache_manager.dart';
 
 part 'protocol_manager.g.dart';
 
+class ProtocolViewData {
+  final String name;
+  final String id;
+
+  ProtocolViewData({required this.name, required this.id});
+
+  @override
+  String toString() {
+    return 'ProtocolViewData{name: $name, id: $id}';
+  }
+}
+
+
 @riverpod
 ProtocolManager protocolManager(Ref ref) {
   final cacheManager = ref.watch(cacheManagerProvider);

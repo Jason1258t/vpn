@@ -25,10 +25,17 @@ class VpnController extends _$VpnController {
   }
 
   _initAsync() async {
+    state = await _prepareSessionData();
+    _repo.status.stream.listen(_handleStatusChange);
+    _initializePingChecker();
+  }
+
+  Future<VpnSessionStatus> _prepareSessionData() async {
     final protocol = await _protocolManager.getProtocol();
     _repo.setConfigUrl(await _protocolManager.currentConnectUrl);
 
     final ping = await _repo.ping();
+
     final VpnStatus status;
     final cacheManager = ref.read(cacheManagerProvider);
     DateTime? cachedSession = await cacheManager.getStartTime();
@@ -45,15 +52,12 @@ class VpnController extends _$VpnController {
       status = VpnStatus.disconnected;
     }
 
-    state = VpnSessionStatus(
+    return VpnSessionStatus(
       ping: ping,
       status: status,
       sessionStartTime: cachedSession,
       protocol: protocol,
     );
-
-    _repo.status.stream.listen(_handleStatusChange);
-    _initializePingChecker();
   }
 
   _handleStatusChange(VpnStatus s) async {
@@ -78,16 +82,27 @@ class VpnController extends _$VpnController {
   }
 
   Future<void> toggleConnection() async {
-    state.status == VpnStatus.disconnected ? _repo.connect() : _repo.disconnect();
+    state.status == VpnStatus.disconnected
+        ? _repo.connect()
+        : _repo.disconnect();
   }
+
+  static final List<ProtocolViewData> protocols = [
+    ProtocolViewData(name: "Reality", id: AvailableProtocols.vlessReality),
+    ProtocolViewData(name: "xHttp", id: AvailableProtocols.vlessXHttp),
+  ];
 
   Future<void> toggleProtocol() async {
     if (state.status != VpnStatus.disconnected) await _repo.disconnect();
-    final protocol = await _protocolManager.getProtocol();
+    final currentProtocol = await _protocolManager.getProtocol();
 
-    final newProtocol = protocol == AvailableProtocols.vlessReality
-        ? AvailableProtocols.vlessXHttpTLS
-        : AvailableProtocols.vlessReality;
+    if (protocols.isEmpty) return;
+
+    int ind = protocols.indexWhere((p) => p.id == currentProtocol);
+    if (ind == protocols.length - 1) ind = -1;
+    ind += 1;
+
+    final newProtocol = protocols[ind].id;
 
     await _protocolManager.setProtocol(newProtocol);
     _repo.setConfigUrl(await _protocolManager.currentConnectUrl);
