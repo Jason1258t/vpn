@@ -1,16 +1,68 @@
-# vpn
+# ZXC VPN
 
-A new Flutter project.
+**ZXC VPN** — это современный VPN-клиент на базе Flutter, ориентированный на использование протоколов семейства Xray (VLESS и др.). Приложение сочетает в себе высокую производительность нативного туннелирования и элегантный интерфейс в стиле iOS (Cupertino).
 
-## Getting Started
+## 🚀 Основные возможности
 
-This project is a starting point for a Flutter application.
+- **Поддержка Xray/VLESS:** Использование современных и быстрых протоколов для обхода блокировок.
+- **Мониторинг в реальном времени:** Отслеживание статуса подключения, времени сессии и задержки (ping).
+- **Переключение протоколов:** Возможность быстрого выбора между различными конфигурациями.
+- **Cupertino UI:** Чистый и интуитивно понятный интерфейс, следующий гайдлайнам Apple.
+- **Темная тема:** Оптимизированный интерфейс для комфортного использования в ночное время.
+- **Нативная интеграция:** Низкоуровневая реализация VPN-туннеля для стабильной работы в фоновом режиме.
 
-A few resources to get you started if this is your first Flutter project:
+## ⚙️ Нативная реализация (Android)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Для обеспечения высокоскоростной и надежной работы VPN на платформе Android используется интеграция с нативными библиотеками через JNI/Method Channels:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- **Core Engine:** Использование **libXray** для обработки протоколов V2Ray/Xray.
+- **Туннелирование:** Использование **tun2socks** для перенаправления всего трафика устройства через прокси-ядро.
+- **Binary:** Библиотеки поставляются в виде предварительно собранного (pre-bundled) архива `combined.aar`, расположенного в `android/app/libs`, что упрощает сборку и обеспечивает стабильность работы туннеля.
+
+## 🛠 Технологический стек
+
+- **Framework:** [Flutter](https://flutter.dev/)
+- **State Management:** [Riverpod](https://riverpod.dev/) (Hooks & Code Generation) для реактивного управления состоянием.
+- **UI:** Cupertino Widgets для создания нативного вида на iOS.
+- **Reactivity:** [RxDart](https://pub.dev/packages/rxdart) для обработки потоков данных о статусе VPN.
+- **Native Bridge:** Method Channels и Event Channels для связи с нативным кодом (Android/iOS).
+- **Environment:** `flutter_dotenv` для безопасного управления конфигурациями.
+- **Storage:** `shared_preferences` для сохранения настроек пользователя.
+
+## 📂 Структура проекта
+
+- `lib/vpn_service/`: Ядро логики VPN, парсеры конфигураций Xray и сервис пинга.
+- `lib/data/`: Провайдеры данных и логика контроллеров (Riverpod).
+- `lib/widgets/`: Переиспользуемые UI-компоненты (кнопка подключения, инфо о сервере, секундомер).
+- `lib/theme.dart`: Константы оформления и цветовая схема.
+
+## 🏁 Начало работы
+
+### Требования
+- Flutter SDK (^3.8.1)
+- Настроенная среда разработки для Android или iOS.
+
+### Установка
+
+1. **Клонируйте репозиторий:**
+   ```bash
+   git clone <repository-url>
+   ```
+
+2. **Установите зависимости:**
+   ```bash
+   flutter pub get
+   ```
+
+3. **Сгенерируйте код для Riverpod:**
+   ```bash
+   dart run build_runner build
+   ```
+
+4. **Запустите приложение:**
+   ```bash
+   flutter run
+   ```
+
+---
+*Проект находится в стадии активной разработки.*
